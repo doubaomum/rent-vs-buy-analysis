@@ -5,7 +5,6 @@
 1.1 Residential Property Price Index
 
 To analyze housing market performance in Canada, both national-level and city-level residential property price indices were collected.
-
 The national dataset provides a macro-level benchmark, while the city-level dataset captures regional variation across major urban markets, enabling a more comprehensive analysis.
 
 1.1.1 National-Level Residential Property Price Index (Canada)
@@ -50,18 +49,42 @@ Selecting the Canadian real residential property price index
 Downloading the dataset in CSV format
 Extracting and organizing the relevant time series
 
-1.1.1.5 Data Cleaning and Preprocessing
+1.1.1.5 Data Pre-Cleaning in Excel
 
-To ensure data consistency and usability, the following steps were applied:
+To ensure data consistency and usability, an initial pre-cleaning process was performed using Microsoft Excel before further processing in Python.
 
-Time period filtering
-Only data from 1990–2025 was retained to align with other datasets
-Column selection
-Only the primary index series was kept, removing unnecessary variables
-Data structuring
-The dataset was formatted into a clean time series with proper chronological order
+The following steps were applied:
 
-These steps ensure the dataset is suitable for comparative analysis.
+(1) Removal of Irrelevant Content
+
+Non-data elements were removed, including:
+
+Descriptive text at the beginning of the dataset
+Notes and annotations
+
+This step ensures that only structured data is retained.
+
+(2) Column Selection
+
+Only the primary index series was preserved, while unnecessary variables were removed.
+
+This simplifies the dataset and improves interpretability.
+
+(3) Data Type Standardization
+
+To facilitate downstream processing, key columns were standardized:
+
+The time column was converted to a proper date format
+The price column was converted to numeric format
+
+This ensures compatibility with data analysis tools such as pandas.
+
+(4) Data Structuring
+
+The dataset was reorganized into a clean time series format with:
+
+Consistent column structure
+Proper chronological ordering
 
 1.1.1.6 Purpose of Using This Data
 
@@ -123,7 +146,7 @@ Downloading the dataset in CSV format
 Standardizing formats and aligning time periods
 Organizing the data into structured tables
 
-1.1.2.5 Data Cleaning and Preprocessing
+1.1.2.5 Data pre-Cleaning by excel
 
 To improve data quality and analytical consistency, the following steps were applied:
 
@@ -233,55 +256,48 @@ Setting the data frequency to monthly
 Downloading the dataset in CSV format
 Extracting the Adjusted Close values for analysis
 
-1.2.5 Data Cleaning and Preprocessing
+1.2.5 Data Pre-Cleaning in Excel
 
-To ensure consistency and usability across datasets, the following cleaning steps were applied:
+To ensure data consistency and usability, an initial pre-cleaning process was performed using Microsoft Excel before further processing in Python.
 
-Column Selection
+The following steps were applied:
 
-Only the Adjusted Close (Adj Close) column was retained.
-The following columns were removed:
-Open
-High
-Low
-Close
-Volume
+(1) Removal of Irrelevant Content
 
-These variables are primarily relevant for short-term trading and are not required for long-term investment analysis.
+Non-data elements were removed, including:
 
-Data Filtering
-All datasets were filtered to retain observations from:
-January 1999 to December 2025
+Descriptive text at the beginning of the dataset
+Notes and annotations
 
-This ensures consistency with the housing dataset and allows for unified analysis.
+This step ensures that only structured data is retained.
 
-Data Formatting
-All datasets were converted into monthly time series format
-Date formats were standardized across datasets
-Data was sorted chronologically
-Consistency Across Datasets
+(2) Column Selection
 
-The same cleaning procedure was applied consistently to:
+Only the primary index series was preserved, while unnecessary variables were removed.
 
-S&P/TSX Composite Index
-S&P 500 Index
-VT ETF
+This simplifies the dataset and improves interpretability.
+
+(3) Data Type Standardization
+
+To facilitate downstream processing, key columns were standardized:
+
+The time column was converted to a proper date format
+The price column was converted to numeric format
+
+This ensures compatibility with data analysis tools such as pandas.
+
+(4) Data Structuring
+
+The dataset was reorganized into a clean time series format with:
+
+Consistent column structure
+Proper chronological ordering
 
 This ensures comparability across different equity markets.
 
 1.2.6 Data Transformation
 
 To enable meaningful comparison across different asset classes, several transformations were applied:
-
-Currency Adjustment
-
-The S&P 500 and VT datasets are originally denominated in U.S. dollars (USD).
-
-To ensure consistency with Canadian housing price data, both datasets were:
-
-converted from USD to Canadian dollars (CAD)
-
-This adjustment reflects the perspective of a Canadian investor and allows for more realistic comparison across asset classes.
 
 Index Normalization
 
@@ -314,9 +330,134 @@ Currency conversion introduces additional variability due to exchange rate fluct
 The analysis does not account for taxes, transaction costs, or investor-specific behavior
 The indices represent aggregate market performance and may not reflect individual portfolios
 
-1.3 Canadian Dollars to U.S. Dollar Spot Exchange Rate
+1.3 Rent Data
 
-1.3.1 Data Source: Federal Reserve Economic Data
+To evaluate housing affordability and compare renting versus buying, rental market data was collected at both the national and city levels.
+
+The national dataset provides an overall benchmark for rental market conditions in Canada, while the city-level dataset captures regional differences across major urban markets.
+
+This combination enables a more comprehensive analysis of rental dynamics and their relationship with housing prices and investment returns.
+
+1.3.1 Primary Rental Market Data
+1.3.1.1 Data Source
+
+The rental data is sourced from the Canada Mortgage and Housing Corporation (CMHC), a federal agency responsible for providing reliable housing market data and analysis in Canada.
+
+Specifically, the dataset is obtained from the Housing Market Information Portal (HMIP):
+
+https://www03.cmhc-schl.gc.ca/hmip-pimh/en/TableMapChart/Table?TableId=2.2.11&GeographyId=2270&GeographyTypeId=3&DisplayAs=Table
+
+The CMHC Rental Market Survey (RMS) is widely used by researchers, policymakers, and industry professionals to analyze rental housing conditions.
+
+1.3.1.2 Dataset Overview
+
+Rental Market Survey – Average Rent and Vacancy Rate (Primary Rental Market)
+
+Selected cities:
+
+Toronto
+Vancouver
+Montreal
+Calgary
+Ottawa
+Edmonton
+
+The dataset covers approximately 2000–2025 (depending on data availability) and is reported at an annual frequency (October of each year).
+
+1.3.1.3 Data Description
+
+The dataset consists of time series data on rental market conditions.
+
+Key variables include:
+
+Average Rent ($)
+Represents the average monthly rent for purpose-built rental apartments
+Vacancy Rate (%)
+Measures the proportion of rental units that are unoccupied
+
+Key characteristics:
+
+Annual data (October snapshot)
+City-level granularity
+Breakdown by bedroom type (studio, 1-bedroom, 2-bedroom, etc.)
+
+For this project, 2-bedroom units are used as the primary indicator, as they better represent typical household housing demand.
+
+1.3.1.4 Data Collection Method
+
+The dataset was collected through the CMHC HMIP portal.
+
+The process included:
+
+Selecting the Primary Rental Market category
+Choosing relevant variables:
+Average Rent ($)
+Vacancy Rate (%)
+Filtering by selected cities
+Downloading the data in CSV format
+Repeating the process for each city and metric
+
+The collected files were then organized into structured datasets for further processing.
+
+1.3.1.5 Data Pre-Cleaning in Excel
+
+To ensure data consistency and usability, an initial pre-cleaning process was performed using Microsoft Excel before further processing in Python.
+
+The following steps were applied:
+
+(1) Removal of Irrelevant Content
+
+Non-data elements were removed, including:
+
+Descriptive text at the beginning of the dataset
+Notes and annotations
+
+This step ensures that only structured data is retained.
+
+(2) Column Selection
+
+Only the primary index series was preserved, while unnecessary variables were removed.
+
+This simplifies the dataset and improves interpretability.
+
+(3) Data Type Standardization
+
+To facilitate downstream processing, key columns were standardized:
+
+The time column was converted to a proper date format
+The price column was converted to numeric format
+
+This ensures compatibility with data analysis tools such as pandas.
+
+(4) Data Structuring
+
+The dataset was reorganized into a clean time series format with:
+
+Consistent column structure
+Proper chronological ordering
+
+1.3.1.6 Purpose of Using This Data
+
+This dataset is used to:
+
+Represent rental housing costs across major Canadian cities
+Analyze rental market conditions using vacancy rates
+Compare rental costs with housing prices and stock market returns
+Support the evaluation of “rent vs buy” and “rent + invest” strategies
+
+Additionally, vacancy rate serves as an important explanatory variable for understanding rent dynamics.
+
+1.3.1.7 Limitations
+Annual frequency (no monthly detail)
+Limited historical depth compared to financial data
+Potential inconsistencies across cities
+Focuses only on the primary rental market (excludes secondary rental units such as condominiums and basement rentals)
+
+Despite these limitations, the dataset provides a reliable and widely accepted representation of rental market conditions in Canada.
+
+1.4 Canadian Dollars to U.S. Dollar Spot Exchange Rate
+
+1.4.1 Data Source: Federal Reserve Economic Data
 
 The exchange rate data used in this project is obtained from the Federal Reserve Economic Data (FRED), a widely recognized and reliable source for macroeconomic and financial time series.
 
@@ -328,7 +469,7 @@ This dataset provides the daily exchange rate between the Canadian Dollar (CAD) 
 
 CAD per USD (i.e., the number of Canadian dollars required to purchase one U.S. dollar)
 
-1.3.2 Dataset Overview
+1.4.2 Dataset Overview
 
 The dataset includes:
 
@@ -340,7 +481,7 @@ DEXCAUS: Exchange rate (CAD per USD)
 
 The dataset was downloaded in CSV format and stored in the project directory for further processing.
 
-1.3.3 Purpose in This Project
+1.4.3 Purpose in This Project
 
 The exchange rate data is used to:
 
