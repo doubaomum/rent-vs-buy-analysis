@@ -2,34 +2,54 @@ import pandas as pd
 from pathlib import Path
 
 # ============================================================
+# ============================================================
+
+# ============================================================
 # 1. Define file paths
 # ============================================================
-# Use pathlib instead of plain strings.
-# This makes file paths cleaner and easier to manage across the project.
 
-RAW_DIR = Path("raw_data/pre_cleaned_data")
-OUTPUT_DIR = Path("data_cleaned")
+# Because clean_data.py is inside src/,
+# we need ../ to move back to project root.
 
-# Make sure the output folder exists.
-# If it does not exist, Python will create it automatically.
+BASE_DIR = Path(__file__).resolve().parent.parent / "data"
+
+HOUSE_DIR = BASE_DIR / "processed" / "house"
+STOCK_DIR = BASE_DIR / "processed" / "stock"
+RENT_DIR = BASE_DIR / "processed" / "rent"
+FX_DIR = BASE_DIR / "external" / "fx"
+
+# Final output folder
+OUTPUT_DIR = BASE_DIR / "processed" / "final"
+# Create output folder if needed
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+# ============================================================
 # House price data
-canada_house_path = RAW_DIR / "house" / "canada_house.csv"
-city_house_path = RAW_DIR / "house" / "city_house.csv"
+# ============================================================
 
+canada_house_path = HOUSE_DIR / "canada_house.csv"
+city_house_path = HOUSE_DIR / "city_house.csv"
+
+# ============================================================
 # Stock market data
-tsx_path = RAW_DIR / "stock" / "tsx.csv"
-sp500_path = RAW_DIR / "stock" / "sp500.csv"
-vt_path = RAW_DIR / "stock" / "vt.csv"
+# ============================================================
 
+tsx_path = STOCK_DIR / "tsx.csv"
+sp500_path = STOCK_DIR / "sp500.csv"
+vt_path = STOCK_DIR / "vt.csv"
+
+# ============================================================
 # Foreign exchange data
-fx_path = RAW_DIR / "fx" / "usd_cad.csv"
+# ============================================================
 
-# Rent and vacancy data folder
-rent_folder = RAW_DIR / "rent"
+fx_path = FX_DIR / "usd_cad.csv"
 
-# Rent and vacancy files for Canada and six major cities
+# ============================================================
+# Rent and vacancy data
+# ============================================================
+
+rent_folder = RENT_DIR
+
 rent_paths = {
     "canada": (
         rent_folder / "canada_rent.csv",
@@ -61,6 +81,7 @@ rent_paths = {
     ),
 }
 
+
 # Define the analysis period.
 # This ensures all datasets are aligned to the same time range.
 START_DATE = "1999-01-01"
@@ -87,6 +108,21 @@ def standardize_monthly_date(df, date_col):
     df[date_col] = df[date_col].dt.to_period("M").dt.to_timestamp()
     return df
 
+def normalize_to_2010(df, columns, base_date="2010-01-01"):
+    """
+    Normalize selected columns to 2010 = 100.
+    Formula:
+        normalized_value = current_value / value_in_2010 * 100
+    """
+    base_date = pd.to_datetime(base_date)
+
+    for col in columns:
+        if col in df.columns:
+            base_value = df.loc[df["date"] == base_date, col].iloc[0]
+
+            df[f"{col}_2010_index"] = df[col] / base_value * 100
+
+    return df
 
 # ============================================================
 # 3. Clean Canada and city-level house price data
@@ -322,6 +358,41 @@ rent_cleaned.to_csv(OUTPUT_DIR / "rent_cleaned.csv", index=False)
 # The final dataset is organized by monthly date.
 market_data_all = house_cleaned.merge(stock_cleaned, on="date", how="left")
 market_data_all = market_data_all.merge(rent_cleaned, on="date", how="left")
+
+# ============================================================
+# 6.1 Normalize selected columns to 2010 = 100
+# ============================================================
+
+columns_to_normalize = [
+    # National and city-level house price indices
+    "canada_house_index",
+    "bc_vancouver",
+    "on_toronto",
+    "qc_montreal",
+    "ab_calgary",
+    "on_ottawa",
+    "ab_edmonton",
+
+    # Stock market data
+    "tsx_cad",
+    "sp500_cad",
+    "vt_cad",
+
+    # Rent data
+    "canada_rent",
+    "toronto_rent",
+    "vancouver_rent",
+    "calgary_rent",
+    "ottawa_rent",
+    "montreal_rent",
+    "edmonton_rent",
+]
+
+market_data_all = normalize_to_2010(
+    market_data_all,
+    columns_to_normalize,
+    base_date="2010-01-01"
+)
 
 market_data_all.to_csv(OUTPUT_DIR / "market_data_all_cleaned.csv", index=False)
 
