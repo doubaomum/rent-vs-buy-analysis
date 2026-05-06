@@ -494,108 +494,43 @@ U.S. and global stock markets
 This step is essential for conducting a consistent financial comparison from a Canadian investor’s perspective.
 
 2. Data Cleaning, Integration, and Currency Conversion
-2.1 Overview
+2.1 Data Cleaning
 
-After data collection, all datasets required preprocessing to ensure consistency, comparability, and usability across different sources.
+After data collection, all datasets required preprocessing to ensure consistency and usability.
 
-The datasets used in this project vary in:
+The key cleaning steps include:
 
-Data frequency (daily, monthly, quarterly, annual)
-Data format (text, numeric, index-based)
-Structure (wide vs. long format)
-
-Therefore, a systematic data cleaning and integration process was applied before analysis.
-
-2.2 Data Cleaning
-(1) Column Name Standardization
-
-Different datasets used inconsistent column names (e.g., “Date”, “TIME_PERIOD”, “Transaction Date”).
-
-These were standardized into a unified format:
+Column Name Standardization
+Different datasets used inconsistent column names (e.g., "Date", "TIME_PERIOD", "Transaction Date").
+These were standardized to a unified column name:
 
 date
 
-This ensures consistency and simplifies downstream merging.
-
-(2) Date Formatting and Frequency Alignment
-
+Date Formatting and Frequency Alignment
 All date fields were converted into a consistent datetime format and aligned to monthly frequency:
 
 df["date"] = pd.to_datetime(df["date"])
 df["date"] = df["date"].dt.to_period("M").dt.to_timestamp()
+Data Type Conversion
+Some datasets contained numeric values stored as text (e.g., TSX values with thousands separators such as "6,729.60").
+These were converted into numeric format to enable quantitative analysis.
+Handling Missing Values
+Quarterly housing data (Canada-wide index) was converted to monthly frequency using forward-fill (ffill())
+Missing exchange rate values were also filled using forward-fill
+2.2 Data Integration (Merging)
 
-This step ensures compatibility across datasets with different original frequencies.
-
-(3) Data Type Conversion
-
-Some datasets contained numeric values stored as text (e.g., stock prices with thousands separators such as "6,729.60").
-
-These values were converted into numeric format:
-
-pd.to_numeric(df["column"], errors="coerce")
-
-This enables accurate quantitative analysis.
-
-(4) Handling Missing Values
-
-Missing values were handled using forward-fill where appropriate:
-
-Quarterly housing data was expanded to monthly frequency using forward-fill
-Missing exchange rate values were also forward-filled
-
-This approach ensures a continuous time series for all variables.
-
-(5) Rent and Vacancy Data Cleaning (Python)
-
-The rent and vacancy datasets required additional preprocessing due to their structure and annual reporting format.
-
-The main steps include:
-
-a. Date Standardization
-
-Date fields were converted into datetime format and standardized to monthly timestamps:
-
-df["date"] = pd.to_datetime(df["date"], errors="coerce")
-df["date"] = df["date"].dt.to_period("M").dt.to_timestamp()
-b. Data Type Conversion
-
-Rent and vacancy values were converted into numeric format:
-
-pd.to_numeric(..., errors="coerce")
-c. Merging Rent and Vacancy Data
-
-For each city, rent and vacancy datasets were merged using the date column:
-
-df_city = rent.merge(vacancy, on="date", how="left")
-d. Frequency Conversion (Annual → Monthly)
-
-CMHC rent and vacancy data are reported annually (typically in October).
-
-To align with monthly datasets (housing prices and stock data), annual values were converted into monthly frequency using forward-fill:
-
-df_city = df_city.set_index("date").resample("MS").ffill().reset_index()
-
-This ensures consistent temporal alignment across all datasets.
-
-e. Multi-City Integration
-
-All cleaned rent and vacancy datasets (Canada and six major cities) were combined into a unified dataset.
-
-2.3 Data Integration (Merging)
-
-All cleaned datasets were merged into a unified dataset using the date column as the primary key.
+All datasets were merged into a unified dataset using the date column as the key.
 
 The datasets include:
 
 Canada national housing price index
 City-level housing price indices
-TSX (Canadian stock market)
+TSX (Canada stock market)
 S&P 500 (U.S. stock market)
 VT ETF (global stock market)
 USD/CAD exchange rate
-Rent and vacancy data
 
-A left join strategy was applied, using city-level housing data as the base:
+A left join strategy was used, with city-level housing data as the base:
 
 df = city_house.merge(canada_house, on="date", how="left")
 df = df.merge(tsx, on="date", how="left")
@@ -603,12 +538,11 @@ df = df.merge(sp500, on="date", how="left")
 df = df.merge(vt, on="date", how="left")
 df = df.merge(fx[["date", "usd_cad"]], on="date", how="left")
 
-This ensures that all variables are aligned along a consistent monthly timeline.
+This ensures all variables are aligned along a consistent monthly timeline.
 
-2.4 Currency Conversion
+2.3 Currency Conversion
 
-To ensure comparability across financial variables, all values were converted into a common currency:
-
+To ensure comparability across all financial variables, all values were converted into a common currency:
 👉 Canadian Dollars (CAD)
 
 TSX: already denominated in CAD
@@ -618,22 +552,22 @@ The exchange rate dataset (CAD per USD) was first converted from daily to monthl
 
 fx = fx.set_index("date").resample("MS").mean().reset_index()
 
-Then, U.S. and global stock indices were converted into CAD:
+Then, U.S. and global stock indices were converted to CAD:
 
 df["sp500_cad"] = df["sp500_usd"] * df["usd_cad"]
 df["vt_cad"] = df["vt_usd"] * df["usd_cad"]
 
-This transformation allows direct comparison across asset classes.
+This transformation allows direct comparison between housing prices and stock market investments within the same currency framework.
 
-2.5 Final Dataset
+2.4 Final Dataset
 
 The final dataset:
 
 Covers the period 1999–2025
 Uses monthly frequency
-Integrates housing, rental, stock, and exchange rate data
-Includes currency-adjusted stock market indicators
+Integrates multiple financial and housing indicators
+Includes currency-adjusted stock market data
 
-The dataset was exported as:
+The cleaned dataset was exported as:
 
-market_data_all_cleaned.csv
+market_data_cleaned.csv

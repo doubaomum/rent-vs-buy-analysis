@@ -1,5 +1,3 @@
-## Datasets to collect
-
 1. Data Collection
 
 1.1 Residential Property Price Index
@@ -49,44 +47,7 @@ Selecting the Canadian real residential property price index
 Downloading the dataset in CSV format
 Extracting and organizing the relevant time series
 
-1.1.1.5 Data Pre-Cleaning in Excel
-
-To ensure data consistency and usability, an initial pre-cleaning process was performed using Microsoft Excel before further processing in Python.
-
-The following steps were applied:
-
-(1) Removal of Irrelevant Content
-
-Non-data elements were removed, including:
-
-Descriptive text at the beginning of the dataset
-Notes and annotations
-
-This step ensures that only structured data is retained.
-
-(2) Column Selection
-
-Only the primary index series was preserved, while unnecessary variables were removed.
-
-This simplifies the dataset and improves interpretability.
-
-(3) Data Type Standardization
-
-To facilitate downstream processing, key columns were standardized:
-
-The time column was converted to a proper date format
-The price column was converted to numeric format
-
-This ensures compatibility with data analysis tools such as pandas.
-
-(4) Data Structuring
-
-The dataset was reorganized into a clean time series format with:
-
-Consistent column structure
-Proper chronological ordering
-
-1.1.1.6 Purpose of Using This Data
+1.1.1.5 Purpose of Using This Data
 
 This dataset is used to:
 
@@ -94,7 +55,7 @@ Represent overall housing market performance in Canada
 Provide an inflation-adjusted benchmark for real estate investment
 Enable comparison with equity market returns
 
-1.1.1.7 Limitations
+1.1.1.6 Limitations
 
 Does not capture regional variation
 Index-based (no absolute price levels)
@@ -146,47 +107,14 @@ Downloading the dataset in CSV format
 Standardizing formats and aligning time periods
 Organizing the data into structured tables
 
-1.1.2.5 Data pre-Cleaning by excel
-
-To improve data quality and analytical consistency, the following steps were applied:
-
-(1) City Selection
-
-Six major cities were selected from the original dataset.
-
-Selection criteria:
-
-Economic significance
-Data completeness
-Geographic representation
-
-(2) Feature Selection
-
-Only the primary Index column was retained. The following were removed:
-
-Seasonally Adjusted Index
-Smoothed Index
-Smoothed SA Index
-Sales Pair Count
-
-This ensures consistency and improves interpretability.
-
-(3) Date Standardization
-
-Dates were converted to YYYY-MM-DD format (e.g., 2000-06-01) to:
-
-Ensure consistency across datasets
-Enable time series analysis
-Support integration with SQL and BI tools
-
-1.1.2.6 Purpose of Using This Data
+1.1.2.5 Purpose of Using This Data
 
 This dataset enables:
 Analysis of regional housing market differences
 More realistic evaluation of investment performance
 Comparison with equity markets at the city level
 
-1.1.2.7 Limitations
+1.1.2.6 Limitations
 Index-based (no absolute price levels)
 No property-type breakdown
 Potential inconsistencies across cities
@@ -238,6 +166,7 @@ This variable is selected because:
 It accounts for dividends and stock splits
 It reflects total return performance
 It provides a more accurate representation of long-term investment outcomes
+
 1.2.4 Data Collection Method
 
 The data was collected from Yahoo Finance through the following sources:
@@ -256,46 +185,7 @@ Setting the data frequency to monthly
 Downloading the dataset in CSV format
 Extracting the Adjusted Close values for analysis
 
-1.2.5 Data Pre-Cleaning in Excel
-
-To ensure data consistency and usability, an initial pre-cleaning process was performed using Microsoft Excel before further processing in Python.
-
-The following steps were applied:
-
-(1) Removal of Irrelevant Content
-
-Non-data elements were removed, including:
-
-Descriptive text at the beginning of the dataset
-Notes and annotations
-
-This step ensures that only structured data is retained.
-
-(2) Column Selection
-
-Only the primary index series was preserved, while unnecessary variables were removed.
-
-This simplifies the dataset and improves interpretability.
-
-(3) Data Type Standardization
-
-To facilitate downstream processing, key columns were standardized:
-
-The time column was converted to a proper date format
-The price column was converted to numeric format
-
-This ensures compatibility with data analysis tools such as pandas.
-
-(4) Data Structuring
-
-The dataset was reorganized into a clean time series format with:
-
-Consistent column structure
-Proper chronological ordering
-
-This ensures comparability across different equity markets.
-
-1.2.6 Data Transformation
+1.2.5 Data Transformation
 
 To enable meaningful comparison across different asset classes, several transformations were applied:
 
@@ -312,7 +202,7 @@ Canadian equity market
 U.S. equity market
 Global equity market
 
-1.2.7 Purpose of Using This Data
+1.2.6 Purpose of Using This Data
 
 The inclusion of equity market data serves several purposes:
 
@@ -321,7 +211,7 @@ To provide benchmarks for long-term returns
 To compare equity returns with housing price growth
 To support the rent vs. buy analysis by evaluating alternative investment strategies
 
-1.2.8 Limitations
+1.2.7 Limitations
 
 Several limitations should be considered:
 
@@ -399,44 +289,7 @@ Repeating the process for each city and metric
 
 The collected files were then organized into structured datasets for further processing.
 
-1.3.1.5 Data Pre-Cleaning in Excel
-
-To ensure data consistency and usability, an initial pre-cleaning process was performed using Microsoft Excel before further processing in Python.
-
-The following steps were applied:
-
-(1) Removal of Irrelevant Content
-
-Non-data elements were removed, including:
-
-Descriptive text at the beginning of the dataset
-Notes and annotations
-
-This step ensures that only structured data is retained.
-
-(2) Column Selection
-
-Only the primary index series was preserved, while unnecessary variables were removed.
-
-This simplifies the dataset and improves interpretability.
-
-(3) Data Type Standardization
-
-To facilitate downstream processing, key columns were standardized:
-
-The time column was converted to a proper date format
-The price column was converted to numeric format
-
-This ensures compatibility with data analysis tools such as pandas.
-
-(4) Data Structuring
-
-The dataset was reorganized into a clean time series format with:
-
-Consistent column structure
-Proper chronological ordering
-
-1.3.1.6 Purpose of Using This Data
+1.3.1.5 Purpose of Using This Data
 
 This dataset is used to:
 
@@ -447,7 +300,7 @@ Support the evaluation of “rent vs buy” and “rent + invest” strategies
 
 Additionally, vacancy rate serves as an important explanatory variable for understanding rent dynamics.
 
-1.3.1.7 Limitations
+1.3.1.6 Limitations
 Annual frequency (no monthly detail)
 Limited historical depth compared to financial data
 Potential inconsistencies across cities
@@ -504,136 +357,5 @@ Data frequency (daily, monthly, quarterly, annual)
 Data format (text, numeric, index-based)
 Structure (wide vs. long format)
 
-Therefore, a systematic data cleaning and integration process was applied before analysis.
-
-2.2 Data Cleaning
-(1) Column Name Standardization
-
-Different datasets used inconsistent column names (e.g., “Date”, “TIME_PERIOD”, “Transaction Date”).
-
-These were standardized into a unified format:
-
-date
-
-This ensures consistency and simplifies downstream merging.
-
-(2) Date Formatting and Frequency Alignment
-
-All date fields were converted into a consistent datetime format and aligned to monthly frequency:
-
-df["date"] = pd.to_datetime(df["date"])
-df["date"] = df["date"].dt.to_period("M").dt.to_timestamp()
-
-This step ensures compatibility across datasets with different original frequencies.
-
-(3) Data Type Conversion
-
-Some datasets contained numeric values stored as text (e.g., stock prices with thousands separators such as "6,729.60").
-
-These values were converted into numeric format:
-
-pd.to_numeric(df["column"], errors="coerce")
-
-This enables accurate quantitative analysis.
-
-(4) Handling Missing Values
-
-Missing values were handled using forward-fill where appropriate:
-
-Quarterly housing data was expanded to monthly frequency using forward-fill
-Missing exchange rate values were also forward-filled
-
-This approach ensures a continuous time series for all variables.
-
-(5) Rent and Vacancy Data Cleaning (Python)
-
-The rent and vacancy datasets required additional preprocessing due to their structure and annual reporting format.
-
-The main steps include:
-
-a. Date Standardization
-
-Date fields were converted into datetime format and standardized to monthly timestamps:
-
-df["date"] = pd.to_datetime(df["date"], errors="coerce")
-df["date"] = df["date"].dt.to_period("M").dt.to_timestamp()
-b. Data Type Conversion
-
-Rent and vacancy values were converted into numeric format:
-
-pd.to_numeric(..., errors="coerce")
-c. Merging Rent and Vacancy Data
-
-For each city, rent and vacancy datasets were merged using the date column:
-
-df_city = rent.merge(vacancy, on="date", how="left")
-d. Frequency Conversion (Annual → Monthly)
-
-CMHC rent and vacancy data are reported annually (typically in October).
-
-To align with monthly datasets (housing prices and stock data), annual values were converted into monthly frequency using forward-fill:
-
-df_city = df_city.set_index("date").resample("MS").ffill().reset_index()
-
-This ensures consistent temporal alignment across all datasets.
-
-e. Multi-City Integration
-
-All cleaned rent and vacancy datasets (Canada and six major cities) were combined into a unified dataset.
-
-2.3 Data Integration (Merging)
-
-All cleaned datasets were merged into a unified dataset using the date column as the primary key.
-
-The datasets include:
-
-Canada national housing price index
-City-level housing price indices
-TSX (Canadian stock market)
-S&P 500 (U.S. stock market)
-VT ETF (global stock market)
-USD/CAD exchange rate
-Rent and vacancy data
-
-A left join strategy was applied, using city-level housing data as the base:
-
-df = city_house.merge(canada_house, on="date", how="left")
-df = df.merge(tsx, on="date", how="left")
-df = df.merge(sp500, on="date", how="left")
-df = df.merge(vt, on="date", how="left")
-df = df.merge(fx[["date", "usd_cad"]], on="date", how="left")
-
-This ensures that all variables are aligned along a consistent monthly timeline.
-
-2.4 Currency Conversion
-
-To ensure comparability across financial variables, all values were converted into a common currency:
-
-👉 Canadian Dollars (CAD)
-
-TSX: already denominated in CAD
-S&P 500 and VT: originally in USD
-
-The exchange rate dataset (CAD per USD) was first converted from daily to monthly frequency:
-
-fx = fx.set_index("date").resample("MS").mean().reset_index()
-
-Then, U.S. and global stock indices were converted into CAD:
-
-df["sp500_cad"] = df["sp500_usd"] * df["usd_cad"]
-df["vt_cad"] = df["vt_usd"] * df["usd_cad"]
-
-This transformation allows direct comparison across asset classes.
-
-2.5 Final Dataset
-
-The final dataset:
-
-Covers the period 1999–2025
-Uses monthly frequency
-Integrates housing, rental, stock, and exchange rate data
-Includes currency-adjusted stock market indicators
-
-The dataset was exported as:
-
-market_data_all_cleaned.csv
+Therefore, a systematic data cleaning and integration process 
+was applied before analysis.
