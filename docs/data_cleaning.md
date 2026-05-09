@@ -1,4 +1,4 @@
-# 2. Data Cleaning, Integration
+# 2. Data Cleaning and Preprocessing
 
 ## 2.1 Overview
 
@@ -11,7 +11,7 @@ The datasets used in this project vary in:
 - Structure (wide vs. long format)
 - Base index definitions (different benchmark years)
 
-Therefore, a systematic data cleaning and integration process was applied before analysis.
+Therefore, a systematic data cleaning and preprocessing workflow was applied before analysis.
 
 ---
 
@@ -51,7 +51,7 @@ These were standardized into a unified column name:
 date
 ```
 
-This simplified merging and downstream analysis.
+This simplified downstream processing and time-series analysis.
 
 ---
 
@@ -108,50 +108,168 @@ To align these datasets with monthly housing and stock market data, annual obser
 df_city = df_city.set_index("date").resample("MS").ffill().reset_index()
 ```
 
-This produced monthly rental and vacancy series that were consistent with the frequency of the housing and financial datasets.
+This produced monthly rental and vacancy series consistent with the frequency of the housing and financial datasets.
 
 ---
 
-# 2.5 Data Integration
+# 2.5 Currency Conversion
 
-All cleaned datasets were merged into a single dataset using the `date` column as the primary key.
+The S&P 500 and VT ETF datasets were originally denominated in U.S. Dollars (USD), while Canadian housing and TSX datasets were denominated in Canadian Dollars (CAD).
 
-## The integrated datasets include:
+To ensure comparability across all asset classes, U.S.-denominated assets were converted into Canadian Dollars using the USD/CAD exchange rate.
 
-- Canada national housing price index
-- City-level housing price indices
-- TSX (Canadian stock market)
-- S&P 500 (U.S. stock market)
-- VT ETF (global stock market)
-- USD/CAD exchange rate
-- Rent and vacancy data
+Exchange rate data was obtained from the Federal Reserve Economic Data (FRED) database.
 
-A left join strategy was applied using city-level housing data as the base dataset:
-
-```python
-df = city_house.merge(canada_house, on="date", how="left")
-df = df.merge(tsx, on="date", how="left")
-df = df.merge(sp500, on="date", how="left")
-df = df.merge(vt, on="date", how="left")
-df = df.merge(fx[["date", "usd_cad"]], on="date", how="left")
-```
-
-This ensured that all variables shared a consistent monthly timeline.
-
----
-
-# 2.6 Final Dataset
-
-The final cleaned dataset:
-
-- Covers the period **1999–2025**
-- Uses monthly frequency
-- Integrates housing, rental, stock market, and exchange rate data
-- Includes currency-adjusted stock market indicators
-- Includes normalized index series using **2010 = 100**
-
-The dataset was exported as:
+## The conversion formula used in this project is:
 
 ```text
-market_data_all_cleaned.csv
+Asset Value (CAD) = Asset Value (USD) × USD/CAD Exchange Rate
+```
+
+The exchange rate dataset was first converted from daily frequency to monthly average values:
+
+```python
+fx = fx.set_index("date").resample("MS").mean().reset_index()
+```
+
+Then, U.S. and global stock market indices were converted into Canadian Dollars:
+
+```python
+stock_cleaned["sp500_cad"] = (
+    stock_cleaned["sp500_usd"] * stock_cleaned["usd_cad"]
+)
+
+stock_cleaned["vt_cad"] = (
+    stock_cleaned["vt_usd"] * stock_cleaned["usd_cad"]
+)
+```
+
+This transformation allows direct comparison between:
+
+- Canadian housing markets
+- Canadian stock market performance
+- U.S. stock market performance
+- Global equity market performance
+
+from a Canadian investor’s perspective.
+
+---
+
+# 2.6 Indexed Growth Series
+
+To enable meaningful comparison across different asset classes, selected variables were transformed into indexed growth series.
+
+Because different datasets use different original scales and benchmark definitions, indexed normalization was applied using common base years.
+
+---
+
+## 2.6.1 Long-Term Comparison
+
+Assets with full historical coverage were normalized using:
+
+```text
+1999 = 100
+```
+
+This comparison includes:
+
+- Canadian housing market
+- Major Canadian city housing markets
+- TSX Composite Index
+- S&P 500
+- Rent series
+
+---
+
+## 2.6.2 Global Market Comparison
+
+The VT ETF dataset begins in July 2008.
+
+Therefore, a second indexed comparison series was created using:
+
+```text
+2008-07 = 100
+```
+
+This comparison includes:
+
+- Canadian housing market
+- Major Canadian city housing markets
+- TSX Composite Index
+- S&P 500
+- VT ETF
+- Rent series
+
+---
+
+## Normalization Formula
+
+```text
+Indexed Value = (Current Value / Base Value) × 100
+```
+
+This transformation enables:
+
+- Comparison across assets with different scales
+- Long-term trend visualization
+- Consistent comparison between housing and financial assets
+
+---
+
+# 2.7 Final Cleaned Datasets
+
+Three final cleaned datasets were generated.
+
+---
+
+## 1. House Price Dataset
+
+### `house_price_cleaned.csv`
+
+Includes:
+
+- Canada-wide housing price index
+- Six major Canadian city housing price indices
+- Indexed growth series
+
+---
+
+## 2. Stock Market Dataset
+
+### `stock_cleaned.csv`
+
+Includes:
+
+- TSX Composite Index
+- S&P 500
+- VT ETF
+- USD/CAD exchange rate
+- CAD-adjusted stock market series
+- Indexed growth series
+
+---
+
+## 3. Rent and Vacancy Dataset
+
+### `rent_cleaned.csv`
+
+Includes:
+
+- National and city-level rent data
+- Vacancy rate data
+- Indexed rent growth series
+
+---
+
+## Final Dataset Characteristics
+
+All final datasets:
+
+- Cover the period **1999–2025**
+- Use **monthly frequency**
+- Are standardized for time-series analysis
+- Are suitable for:
+  - Power BI
+  - SQL
+  - Financial analysis workflows
 ```

@@ -27,8 +27,8 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 # House price data
 # ============================================================
 
-canada_house_path = HOUSE_DIR / "canada_house.csv"
-city_house_path = HOUSE_DIR / "city_house.csv"
+canada_house_path = HOUSE_DIR / "canada_house_index2010=100.csv"
+city_house_path = HOUSE_DIR / "city_house_index2005/06=100.csv"
 
 # ============================================================
 # Stock market data
@@ -108,19 +108,39 @@ def standardize_monthly_date(df, date_col):
     df[date_col] = df[date_col].dt.to_period("M").dt.to_timestamp()
     return df
 
-def normalize_to_2010(df, columns, base_date="2010-01-01"):
+def normalize_to_base(df, columns, base_date, suffix):
     """
-    Normalize selected columns to 2010 = 100.
+    Normalize selected columns to a specific base date = 100.
+
     Formula:
-        normalized_value = current_value / value_in_2010 * 100
+        normalized_value = current_value / base_value * 100
+
+    Parameters
+    ----------
+    df : pandas DataFrame
+    columns : list
+        Columns to normalize
+    base_date : str
+        Example: "1999-01-01"
+    suffix : str
+        Example: "1999_index"
     """
+
     base_date = pd.to_datetime(base_date)
 
     for col in columns:
         if col in df.columns:
-            base_value = df.loc[df["date"] == base_date, col].iloc[0]
 
-            df[f"{col}_2010_index"] = df[col] / base_value * 100
+            # Skip column if base date value is missing
+            base_rows = df.loc[df["date"] == base_date, col]
+
+            if base_rows.empty or pd.isna(base_rows.iloc[0]):
+                print(f"Skipping {col}: no base value for {base_date}")
+                continue
+
+            base_value = base_rows.iloc[0]
+
+            df[f"{col}_{suffix}"] = df[col] / base_value * 100
 
     return df
 
@@ -170,6 +190,29 @@ house_cleaned = house_cleaned[
     (house_cleaned["date"] <= END_DATE)
 ]
 
+house_columns = [
+    "canada_house_index",
+    "bc_vancouver",
+    "on_toronto",
+    "qc_montreal",
+    "ab_calgary",
+    "on_ottawa",
+    "ab_edmonton",
+]
+
+house_cleaned = normalize_to_base(
+    house_cleaned,
+    house_columns,
+    base_date="1999-01-01",
+    suffix="index_1999"
+)
+
+house_cleaned = normalize_to_base(
+    house_cleaned,
+    house_columns,
+    base_date="2008-07-01",
+    suffix="index_2008"
+)
 house_cleaned.to_csv(OUTPUT_DIR / "house_price_cleaned.csv", index=False)
 
 
@@ -249,6 +292,33 @@ stock_cleaned = stock_cleaned[
     (stock_cleaned["date"] <= END_DATE)
 ]
 
+# VT ETF begins in 2008.
+# Therefore, a second indexed comparison series
+# is created using 2008 = 100.
+stock_columns_1999 = [
+    "tsx_cad",
+    "sp500_cad",
+]
+
+stock_cleaned = normalize_to_base(
+    stock_cleaned,
+    stock_columns_1999,
+    base_date="1999-01-01",
+    suffix="index_1999"
+)
+
+stock_columns_2008 = [
+    "tsx_cad",
+    "sp500_cad",
+    "vt_cad",
+]
+
+stock_cleaned = normalize_to_base(
+    stock_cleaned,
+    stock_columns_2008,
+    base_date="2008-07-01",
+    suffix="index_2008"
+)
 stock_cleaned.to_csv(OUTPUT_DIR / "stock_cleaned.csv", index=False)
 
 
@@ -347,38 +417,7 @@ rent_cleaned = rent_cleaned[
     (rent_cleaned["date"] <= END_DATE)
 ]
 
-rent_cleaned.to_csv(OUTPUT_DIR / "rent_cleaned.csv", index=False)
-
-
-# ============================================================
-# 6. Combine all cleaned datasets
-# ============================================================
-
-# Merge house price, stock market, FX-adjusted stock data, rent, and vacancy data.
-# The final dataset is organized by monthly date.
-market_data_all = house_cleaned.merge(stock_cleaned, on="date", how="left")
-market_data_all = market_data_all.merge(rent_cleaned, on="date", how="left")
-
-# ============================================================
-# 6.1 Normalize selected columns to 2010 = 100
-# ============================================================
-
-columns_to_normalize = [
-    # National and city-level house price indices
-    "canada_house_index",
-    "bc_vancouver",
-    "on_toronto",
-    "qc_montreal",
-    "ab_calgary",
-    "on_ottawa",
-    "ab_edmonton",
-
-    # Stock market data
-    "tsx_cad",
-    "sp500_cad",
-    "vt_cad",
-
-    # Rent data
+rent_columns = [
     "canada_rent",
     "toronto_rent",
     "vancouver_rent",
@@ -388,17 +427,25 @@ columns_to_normalize = [
     "edmonton_rent",
 ]
 
-market_data_all = normalize_to_2010(
-    market_data_all,
-    columns_to_normalize,
-    base_date="2010-01-01"
+rent_cleaned = normalize_to_base(
+    rent_cleaned,
+    rent_columns,
+    base_date="1999-01-01",
+    suffix="index_1999"
 )
 
-market_data_all.to_csv(OUTPUT_DIR / "market_data_all_cleaned.csv", index=False)
+rent_cleaned = normalize_to_base(
+    rent_cleaned,
+    rent_columns,
+    base_date="2008-07-01",
+    suffix="index_2008"
+)
+rent_cleaned.to_csv(OUTPUT_DIR / "rent_cleaned.csv", index=False)
+
 
 
 # ============================================================
-# 7. Check output
+# 6. Check output
 # ============================================================
 
 print("\n==============================")
@@ -416,9 +463,5 @@ print("rent_cleaned.csv")
 print(rent_cleaned.head())
 print(rent_cleaned.info())
 
-print("\n==============================")
-print("market_data_all_cleaned.csv")
-print(market_data_all.head())
-print(market_data_all.info())
 
-print("\nDone! Four cleaned CSV files saved.")
+print("\nDone! Three cleaned CSV files saved.")

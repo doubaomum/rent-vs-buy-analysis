@@ -1,0 +1,37 @@
+﻿"Housing Economic Account, investment, depreciation and net stock by asset, sector, dwelling type, and housing type (x 1,000,000) c 1"
+"Frequency: Annual"
+"Table: 36-10-0677-01"
+"Release date: 2026-04-09"
+"Geography: Canada, Province or territory"
+""
+""
+
+"Geography","Canada",,,,,,,,,,,,,,,,,,,,,,,,,,
+"Asset","Total residential construction",,,,,,,,,,,,,,,,,,,,,,,,,,
+"Dwelling type","Total dwelling type",,,,,,,,,,,,,,,,,,,,,,,,,,
+"Housing Type","Private housing",,,,,,,,,,,,,,,,,,,,,,,,,,
+"Prices","Current dollars",,,,,,,,,,,,,,,,,,,,,,,,,,
+"Estimate","Geometric end-year net stock",,,,,,,,,,,,,,,,,,,,,,,,,,
+"Institutional sector","1999","2000","2001","2002","2003","2004","2005","2006","2007","2008","2009","2010","2011","2012","2013","2014","2015","2016","2017","2018","2019","2020","2021","2022","2023","2024","2025"
+,"Dollars",,,,,,,,,,,,,,,,,,,,,,,,,,
+"Total economy","763,148","792,078","833,839","899,062","971,684","1,065,648","1,148,477","1,260,781","1,390,847","1,511,884","1,527,291","1,626,710","1,709,881","1,800,466","1,890,120","1,993,709","2,069,239","2,186,444","2,340,803","2,446,479","2,542,989","2,809,949","3,346,157","3,740,986","3,969,226","4,100,945","4,269,971"
+"Non-financial corporations","140,946","145,308","152,137","162,731","175,059","191,566","206,855","227,612","251,323","275,455","281,575","300,116","318,474","340,152","361,293","384,653","404,690","432,113","470,208","503,374","538,522","603,866","727,129","815,800","867,052","899,502","943,295"
+"Financial corporations","17,478","17,974","18,821","20,105","21,639","23,699","25,629","28,270","31,370","34,350","34,988","37,269","39,453","42,113","44,708","47,512","50,014","53,477","58,358","62,517","66,917","74,986","90,198","101,226","107,664","111,807","117,357"
+"General government","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"
+"Households","604,724","628,795","662,880","716,225","774,985","850,383","915,992","1,004,900","1,108,155","1,202,079","1,210,728","1,289,325","1,351,954","1,418,201","1,484,119","1,561,545","1,614,535","1,700,853","1,812,236","1,880,588","1,937,551","2,131,097","2,528,831","2,823,960","2,994,510","3,089,636","3,209,319"
+"Non-profit institutions serving households","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"
+
+
+"Table Corrections:"
+Date,Note
+"2023-09-13","On September 13, 2023, the data for investment, depreciation and end-of-year net stock have been corrected for reference years 1961 to 2022."
+
+
+
+Footnotes:
+1,"There are statistical breaks in the sector and social housing distributions of housing investment, depreciation and net stock between 2020 and 2021. These breaks are the result of improved distributions of the housing stock in units data, which were revised on May 30, 2025. These revised housing stock in units data will be incorporated into the full time series (2020 back to 1961) of the Housing Economic Account with its next release in April 2026."
+
+
+
+"How to cite: Statistics Canada. Table 36-10-0677-01  Housing Economic Account, investment, depreciation and net stock by asset, sector, dwelling type, and housing type (x 1,000,000)"
+https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=3610067701
