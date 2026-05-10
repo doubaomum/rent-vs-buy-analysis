@@ -182,3 +182,150 @@ All equity datasets consist of historical price data.
 - It accounts for dividends and stock splits
 - It reflects total return performance
 - It provides a more accurate representation of long-term investment outcomes
+
+## 1.3 USD/CAD Exchange Rate
+
+### Data Source
+
+The USD/CAD exchange rate data used in this project was obtained from the Federal Reserve Economic Data (FRED) database maintained by the Federal Reserve Bank of St. Louis.
+
+Source:  
+[Canadian Dollars to U.S. Dollar Spot Exchange Rate (DEXCAUS) - FRED](https://fred.stlouisfed.org/series/DEXCAUS?)
+
+The specific dataset used is:
+
+```text
+Canadian Dollars to U.S. Dollar Spot Exchange Rate (DEXCAUS)
+```
+
+The dataset measures:
+
+```text
+Canadian Dollars per One U.S. Dollar
+```
+
+and is reported as:
+
+```text
+Not Seasonally Adjusted
+```
+
+---
+
+### Dataset Overview
+
+The dataset includes:
+
+- Time frequency: Daily
+- Geographic coverage: Canada / United States
+- Measurement type: Foreign exchange rate
+- Units: Canadian Dollars per One U.S. Dollar
+- Time range used in this project: 1990–2025
+
+The original daily exchange rate data was converted into monthly average exchange rates during preprocessing.
+
+---
+
+### Purpose in This Project
+
+The USD/CAD exchange rate data was used to convert U.S.-denominated stock market values into Canadian Dollars (CAD).
+
+Specifically, the exchange rate dataset was used to:
+
+- Convert S&P 500 values from USD to CAD
+- Standardize all asset values into a common currency framework
+- Enable direct comparison between:
+  - Canadian housing prices
+  - Canadian stock market returns
+  - U.S. stock market returns
+
+This conversion ensures that all asset growth comparisons are analyzed from a Canadian investor perspective.
+
+---
+
+### Data Preprocessing
+
+The original dataset was downloaded as daily exchange rate data from FRED.
+
+The preprocessing steps included:
+
+- Standardizing date formats
+- Converting exchange rate values into numeric format
+- Resampling daily observations into monthly averages
+- Filling missing monthly values using forward-fill methods
+
+The cleaned exchange rate dataset was then merged with stock market datasets for currency conversion analysis.
+
+## 1.4 Consumer Price Index (CPI)
+
+### Data Source
+
+The Consumer Price Index (CPI) data used in this project was obtained from the Statistics Canada CPI Monthly Table.
+
+Source:  
+https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1810000401
+
+Statistics Canada is the national statistical agency of Canada and provides official macroeconomic and inflation-related datasets widely used in economic research and financial analysis.
+
+The specific dataset used is:
+
+```text
+Consumer Price Index, monthly, not seasonally adjusted
+```
+
+with the index base:
+
+```text
+2002 = 100
+```
+
+---
+
+### Dataset Overview
+
+The dataset contains monthly inflation index values for various product categories and geographic regions in Canada.
+
+For this project, the following series was selected:
+
+```text
+All-items CPI
+```
+
+The dataset includes:
+
+- Time frequency: Monthly
+- Geographic coverage: Canada
+- Measurement type: Consumer Price Index (CPI)
+- Base year: 2002 = 100
+- Time range used in this project: 1990–2025
+
+---
+
+### Purpose in This Project
+
+The CPI dataset is used to adjust nominal stock market values for inflation in order to calculate real (inflation-adjusted) asset growth.
+
+Specifically, the CPI data was used to:
+
+- Convert nominal TSX returns into real returns
+- Convert nominal S&P 500 returns into real returns
+- Ensure comparability with the BIS real residential property price index
+- Analyze long-term asset growth from a purchasing power perspective
+
+Using inflation-adjusted data allows more meaningful comparison across housing and financial assets over long time horizons.
+
+---
+
+### Data Preprocessing
+
+The original CPI dataset was downloaded in wide-table CSV format, where monthly observations were stored as column headers (e.g., Jan-90, Feb-90).
+
+The preprocessing steps included:
+
+- Removing metadata and unnecessary rows
+- Selecting the “All-items” CPI series
+- Converting the dataset from wide format to long format
+- Standardizing dates into monthly datetime format
+- Converting CPI values into numeric format
+
+The cleaned CPI dataset was then merged with stock market data for inflation adjustment analysis.

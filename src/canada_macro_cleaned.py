@@ -124,7 +124,7 @@ base_cpi_series = cpi.loc[
 if base_cpi_series.empty:
     raise ValueError(f"No CPI value found for base date {BASE_DATE}")
 
-base_cpi = base_cpi_series.iloc[0]
+base_cpi = base_cpi_series.iloc[0]gi t
 
 # ============================================================
 # 3. USD/CAD Exchange Rate
