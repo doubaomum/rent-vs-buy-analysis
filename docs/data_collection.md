@@ -1,135 +1,190 @@
 # 1. Data Collection
 
-## 1.1 Residential Property Price Index
+# 1.1 Residential Property Price Data
 
-To analyze housing market performance in Canada, both national-level and city-level residential property price indices were collected.
+To analyze long-term housing market performance in Canada, both national-level and city-level residential property price datasets were collected.
 
-The national dataset provides a macro-level benchmark, while the city-level dataset captures regional variation across major urban markets, enabling a more comprehensive analysis.
+The project incorporates:
+
+- Real residential property price indices  
+- Nominal residential property price indices  
+- Benchmark housing price data in Canadian Dollars (CAD)
+
+Using multiple housing datasets allows the analysis to capture:
+
+- Long-term housing market trends
+- Inflation-adjusted housing performance
+- Regional housing market variation
+- Actual housing prices required for financial simulation
+
+The national dataset provides a macro-level benchmark for Canadian housing markets, while the city-level datasets capture differences across major urban regions.
 
 ---
 
-## 1.1.1 National-Level Residential Property Price Index (Canada)
+# 1.1.1 National-Level Residential Property Price Data (Canada)
 
-### 1.1.1.1 Data Source
+## 1.1.1.1 Data Sources
 
-The data is obtained from the Bank for International Settlements (BIS), a globally recognized provider of standardized macroeconomic and financial statistics.
+The national-level housing datasets were collected from two primary sources:
 
-Specifically, the dataset is drawn from the Residential Property Price Statistics (RPPS) database, which is widely used in economic and financial analysis.
+### 1. Bank for International Settlements (BIS)
 
-### 1.1.1.2 Dataset Overview
+The long-term housing price index data was obtained from the Bank for International Settlements (BIS) Residential Property Price Statistics (RPPS) database.
 
-**Canada – Selected Residential Property Prices, Real Index (2010 = 100)**
+Two datasets were collected:
 
-This dataset measures inflation-adjusted housing price movements and serves as a long-term benchmark for real estate performance.
+- Canada – Selected Residential Property Prices, Real Index (2010 = 100)
+- Canada – Selected Residential Property Prices, Nominal Index (2010 = 100)
 
-To ensure consistency with other datasets, the analysis focuses on the period **1990–2025**, with earlier observations excluded during preprocessing.
+The datasets are available from:
 
-### 1.1.1.3 Data Description
+- Real Index:  
+  <https://data.bis.org/topics/RPP/BIS,WS_SPP,1.0/Q.CA.R.628>
 
-The dataset consists of a quarterly time series index of residential property prices in Canada.
+- Nominal Index:  
+  <https://data.bis.org/topics/RPP/BIS,WS_SPP,1.0/Q.CA.N.628>
 
-#### Key characteristics include:
+---
 
-- Measures housing price changes over time
-- Adjusted for inflation (real terms)
+### 2. CREA Statistics
+
+Additional benchmark housing price data was collected from CREA Statistics.
+
+The dataset provides actual residential benchmark prices in Canadian Dollars (CAD) and was used to reconstruct historical housing price series required for financial simulation.
+
+The data was collected from:
+
+<https://stats.crea.ca/en-CA/>
+
+---
+
+## 1.1.1.2 Dataset Overview
+
+### BIS Real Residential Property Price Index
+
+The real housing price dataset:
+
+- Measures inflation-adjusted residential property prices
 - Represents national-level housing market trends
-- Expressed as an index (base year 2010 = 100)
+- Uses:
 
-Using real values enables meaningful comparison with other asset classes, such as equities.
+```text
+2010 = 100
+```
 
-### 1.1.1.4 Data Collection Method
+- Covers a long historical period beginning in 1970
 
-The dataset was retrieved from:
-
-<https://data.bis.org/topics/RPP/BIS,WS_SPP,1.0/Q.CA.R.628>
-
-#### The collection process included:
-
-1. Accessing the BIS RPPS database
-2. Selecting the Canadian real residential property price index
-3. Downloading the dataset in CSV format
-4. Extracting and organizing the relevant time series
-
-### 1.1.1.5 Purpose of Using This Data
-
-This dataset is used to:
-
-- Represent overall housing market performance in Canada
-- Provide an inflation-adjusted benchmark for real estate investment
-- Enable comparison with equity market returns
-
-### 1.1.1.6 Limitations
-
-- Does not capture regional variation
-- Index-based (no absolute price levels)
-- No breakdown by housing type
-
-To address these limitations, a city-level dataset is introduced below.
+This dataset is primarily used for macroeconomic and long-term asset comparison analysis.
 
 ---
 
-## 1.1.2 City-Level Residential Property Price Index
+### BIS Nominal Residential Property Price Index
 
-### 1.1.2.1 Data Source
+The nominal housing price dataset:
 
-The data is sourced from Canadian Real Estate Price Index, which provides housing price indices across major Canadian cities.
+- Measures residential property prices without inflation adjustment
+- Uses:
 
-### 1.1.2.2 Dataset Overview
+```text
+2010 = 100
+```
 
-**Residential Property Price Index – Six Major Canadian Cities**
+- Represents raw market price appreciation over time
 
-#### Selected cities:
-
-- Toronto
-- Vancouver
-- Montreal
-- Calgary
-- Ottawa
-- Edmonton
-
-The dataset covers **1999–2025** and is reported at a monthly frequency.
-
-### 1.1.2.3 Data Description
-
-The dataset consists of monthly housing price indices for multiple cities.
-
-#### Key features include:
-
-- Tracks city-level housing price changes
-- Monthly frequency
-- Index-based representation
-- Enables cross-city comparison
-
-This dataset captures regional variation that is not visible in national-level data.
-
-### 1.1.2.4 Data Collection Method
-
-The dataset was collected from:
-
-<https://housepriceindex.ca/>
-
-#### The process included:
-
-1. Selecting relevant cities
-2. Downloading the dataset in CSV format
-3. Standardizing formats and aligning time periods
-4. Organizing the data into structured tables
-
-### 1.1.2.5 Purpose of Using This Data
-
-This dataset enables:
-
-- Analysis of regional housing market differences
-- More realistic evaluation of investment performance
-- Comparison with equity markets at the city level
-
-### 1.1.2.6 Limitations
-
-- Index-based (no absolute price levels)
-- No property-type breakdown
-- Potential inconsistencies across cities
+This dataset is used to reconstruct estimated historical housing prices in nominal Canadian Dollars.
 
 ---
+
+### CREA Benchmark Price Data
+
+The CREA dataset provides:
+
+- Actual benchmark residential housing prices
+- Canadian Dollar (CAD) values
+- Monthly housing price observations
+- Coverage from approximately 2005–2025
+
+Unlike the BIS datasets, the CREA dataset contains absolute housing prices rather than index values.
+
+These benchmark prices are required for:
+
+- Mortgage calculations
+- Down payment estimation
+- Property tax estimation
+- Rent-versus-buy simulation modeling
+
+---
+
+## 1.1.1.3 Reconstruction of Historical Housing Prices
+
+The BIS datasets provide long-term index series but do not contain actual benchmark housing prices in Canadian Dollars.
+
+To construct historical housing price estimates suitable for financial simulation, benchmark housing prices collected from CREA were combined with the BIS nominal housing price index.
+
+The reconstruction process used the following approach:
+
+```math
+Historical\ Price
+=
+Benchmark\ Price_{2010}
+\times
+\frac{Historical\ Index}{Index_{2010}}
+```
+
+Using the benchmark housing price from CREA and the long-term nominal housing price index from BIS, historical housing prices were estimated for earlier periods.
+
+---
+
+## 1.1.1.4 Data Validation
+
+To evaluate the reliability of the reconstructed housing price series, the estimated historical prices were compared against available benchmark housing prices from CREA over overlapping periods.
+
+The observed differences between reconstructed prices and benchmark prices were relatively small, suggesting that the reconstructed historical housing price series provides a reasonable approximation for long-term financial modeling and simulation.
+
+The same reconstruction methodology was later applied to the city-level housing datasets.
+
+---
+
+## 1.1.1.5 Purpose of Using Multiple Housing Datasets
+
+The combination of real indices, nominal indices, and benchmark prices enables the project to support multiple analytical objectives.
+
+### Real Index Data
+
+Used for:
+
+- Inflation-adjusted macroeconomic analysis
+- Long-term comparison with stock market returns
+
+### Nominal Index Data
+
+Used for:
+
+- Measuring raw housing market appreciation
+- Reconstructing historical housing prices
+
+### Benchmark Housing Prices
+
+Used for:
+
+- Mortgage and ownership cost calculations
+- Rent-versus-buy simulation modeling
+- Net worth analysis
+
+---
+
+## 1.1.1.6 Limitations
+
+Several limitations remain within the housing datasets:
+
+- National-level data does not capture regional variation
+- Index-based datasets do not directly provide absolute housing prices
+- Benchmark housing prices are only available for limited historical periods
+- Reconstruction methods introduce estimation error
+- Housing markets may vary significantly across property types and regions
+
+To address regional differences, additional city-level housing datasets were collected and analyzed separately.
+
 
 ## 1.2 Equity Market Index
 
