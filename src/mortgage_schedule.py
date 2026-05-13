@@ -383,10 +383,7 @@ def add_owner_costs(owner_df, rent_df):
         df["house_price"] * PROPERTY_TAX_RATE / 12
     )
 
-    # Monthly depreciation
-    df["depreciation_cost"] = (
-        df["house_price"] * DEPRECIATION_RATE / 12
-    )
+   
     # Monthly depreciation
     # Only the structure depreciates; land does not depreciate.
     df["structure_value"] = df["house_price"] * STRUCTURE_SHARE
