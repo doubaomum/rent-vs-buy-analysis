@@ -21,6 +21,7 @@ MORTGAGE_TYPE = "fixed"      # "fixed" or "variable"
 MORTGAGE_TERM_YEARS = 5      # fixed mortgage renews every 5 years
 
 PROPERTY_TAX_RATE = 0.01
+STRUCTURE_SHARE = 0.50 
 DEPRECIATION_RATE = 0.01
 
 PURCHASE_COST_RATE = 0.02
@@ -373,7 +374,7 @@ def add_owner_costs(owner_df, rent_df):
         how="left"
     )
 
-    # Ben Felix style maintenance assumption:
+    # maintenance assumption:
     # maintenance = 1/3 of monthly rent
     df["maintenance_cost"] = df["rent"] / 3
 
@@ -385,6 +386,13 @@ def add_owner_costs(owner_df, rent_df):
     # Monthly depreciation
     df["depreciation_cost"] = (
         df["house_price"] * DEPRECIATION_RATE / 12
+    )
+    # Monthly depreciation
+    # Only the structure depreciates; land does not depreciate.
+    df["structure_value"] = df["house_price"] * STRUCTURE_SHARE
+
+    df["depreciation_cost"] = (
+        df["structure_value"] * DEPRECIATION_RATE / 12
     )
 
     # Monthly unrecoverable owner cost
