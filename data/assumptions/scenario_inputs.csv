@@ -1,0 +1,8 @@
+scenario_id,city,start_date,down_payment_pct,mortgage_type,property_tax_rate,structure_ratio
+1,Canada,2005-01-01,0.2,5-year fixed,0.01,0.5
+2,Toronto,2005-01-01,0.2,5-year fixed,0.01,0.45
+3,Vancouver,2005-01-01,0.2,5-year fixed,0.008,0.35
+4,Calgary,2005-01-01,0.2,5-year fixed,0.01,0.6
+5,Edmonton,2005-01-01,0.2,5-year fixed,0.01,0.6
+6,Ottawa,2005-01-01,0.2,5-year fixed,0.01,0.5
+7,Montreal,2005-01-01,0.2,5-year fixed,0.01,0.5

@@ -4,10 +4,13 @@ from pathlib import Path
 # ==================================================
 # USER SETTINGS
 # ==================================================
+SCENARIO_INPUTS_PATH = Path("data/assumptions/scenario_inputs.csv")
 
-HOUSE_PRICE_PATH = Path("data/processed/house/canada_house_real_2005-2025.csv")
+HOUSE_PRICE_DIR = Path(
+    "data/processed/house/housing_price2005-2025"
+)
 MORTGAGE_RATE_PATH = Path("data/external/Canada Mortgage_5_year_term.csv")
-RENT_PATH = Path("data/processed/rent/canada_rent.csv")
+RENT_DIR = Path("data/processed/rent")
 
 OUTPUT_PATH = Path("data/processed/final/basic_model_owner_cost_schedule.csv")
 
@@ -47,7 +50,11 @@ def load_house_price(path):
 
     df = pd.read_csv(path)
 
-    df["date"] = pd.to_datetime(df["Date"])
+    df["date"] = pd.to_datetime(
+    df["Date"],
+    format="%Y-%m-%d",
+    errors="coerce"
+)
     df["house_price"] = pd.to_numeric(
         df["Composite_Benchmark_SA"],
         errors="coerce"
@@ -142,7 +149,6 @@ def load_rent(path):
     df = df.sort_values("year")
 
     return df
-
 
 # ==================================================
 # MONTHLY MORTGAGE PAYMENT FORMULA
@@ -347,7 +353,15 @@ def add_owner_wealth(schedule_df, house_price_df):
 # ADD OWNER COSTS
 # ==================================================
 
-def add_owner_costs(owner_df, rent_df):
+def add_owner_costs(
+    owner_df,
+    rent_df,
+    property_tax_rate,
+    structure_share,
+    depreciation_rate,
+    purchase_cost_rate,
+    sale_cost_rate
+):
     """
     Add owner unrecoverable costs.
 
@@ -358,14 +372,10 @@ def add_owner_costs(owner_df, rent_df):
     - depreciation
     - purchase transaction cost
     - sale transaction cost
-
-    Principal repayment is NOT counted as cost,
-    because it builds home equity.
     """
 
     df = owner_df.copy()
 
-    # Match rent by calendar year
     df["year"] = df["date"].dt.year
 
     df = df.merge(
@@ -374,25 +384,18 @@ def add_owner_costs(owner_df, rent_df):
         how="left"
     )
 
-    # maintenance assumption:
-    # maintenance = 1/3 of monthly rent
     df["maintenance_cost"] = df["rent"] / 3
 
-    # Monthly property tax
     df["property_tax"] = (
-        df["house_price"] * PROPERTY_TAX_RATE / 12
+        df["house_price"] * property_tax_rate / 12
     )
 
-   
-    # Monthly depreciation
-    # Only the structure depreciates; land does not depreciate.
-    df["structure_value"] = df["house_price"] * STRUCTURE_SHARE
+    df["structure_value"] = df["house_price"] * structure_share
 
     df["depreciation_cost"] = (
-        df["structure_value"] * DEPRECIATION_RATE / 12
+        df["structure_value"] * depreciation_rate / 12
     )
 
-    # Monthly unrecoverable owner cost
     df["owner_monthly_cost"] = (
         df["mortgage_interest"]
         + df["maintenance_cost"]
@@ -400,21 +403,18 @@ def add_owner_costs(owner_df, rent_df):
         + df["depreciation_cost"]
     )
 
-    # Purchase transaction cost only happens at the first month
     df["purchase_cost"] = 0.0
     df.loc[df.index[0], "purchase_cost"] = (
         df.loc[df.index[0], "house_price_at_purchase"]
-        * PURCHASE_COST_RATE
+        * purchase_cost_rate
     )
 
-    # Sale transaction cost only happens at the final month
     df["sale_cost"] = 0.0
     df.loc[df.index[-1], "sale_cost"] = (
         df.loc[df.index[-1], "house_price"]
-        * SALE_COST_RATE
+        * sale_cost_rate
     )
 
-    # Total owner cost including one-time transaction costs
     df["owner_monthly_unrecoverable_cost"] = (
         df["owner_monthly_cost"]
         + df["purchase_cost"]
@@ -423,46 +423,86 @@ def add_owner_costs(owner_df, rent_df):
 
     return df
 
-
 # ==================================================
 # RUN SCRIPT
 # ==================================================
 
 if __name__ == "__main__":
 
-    # Load input datasets
-    house_price_df = load_house_price(HOUSE_PRICE_PATH)
+    scenario_inputs = pd.read_csv(SCENARIO_INPUTS_PATH)
+
     mortgage_rate_df = load_mortgage_rate(MORTGAGE_RATE_PATH)
-    rent_df = load_rent(RENT_PATH)
 
-    # Generate mortgage schedule
-    schedule = generate_mortgage_schedule(
-        house_price_df=house_price_df,
-        mortgage_rate_df=mortgage_rate_df,
-        start_date=START_DATE,
-        end_date=END_DATE,
-        down_payment_rate=DOWN_PAYMENT_RATE,
-        amortization_years=AMORTIZATION_YEARS,
-        mortgage_type=MORTGAGE_TYPE,
-        mortgage_term_years=MORTGAGE_TERM_YEARS
-    )
+    all_results = []
 
-    # Add house price and owner net worth
-    owner_wealth = add_owner_wealth(
-        schedule_df=schedule,
-        house_price_df=house_price_df
-    )
+    for _, scenario in scenario_inputs.iterrows():
 
-    # Add rent-based maintenance and ownership costs
-    owner_cost = add_owner_costs(
-        owner_df=owner_wealth,
-        rent_df=rent_df
-    )
+        start_date = scenario["start_date"]
+        city = scenario["city"]
+        house_price_path = (
+            HOUSE_PRICE_DIR
+            / f"{city.lower()}_house_price.csv"
+        )
+        rent_path = (
+            RENT_DIR
+            / f"{city.lower()}_rent.csv"
+        )
 
-    # Save output
+        rent_df = load_rent(rent_path)
+        house_price_df = load_house_price(house_price_path)
+        down_payment_rate = scenario["down_payment_pct"]
+        property_tax_rate = scenario["property_tax_rate"]
+        structure_share = scenario["structure_ratio"]
+
+        print("\n=== Running Scenario ===")
+        print(scenario)
+        print("House Price File:", house_price_path)
+        print("Rent File:", rent_path)
+
+        schedule = generate_mortgage_schedule(
+            house_price_df=house_price_df,
+            mortgage_rate_df=mortgage_rate_df,
+            start_date=start_date,
+            end_date=END_DATE,
+            down_payment_rate=down_payment_rate,
+            amortization_years=AMORTIZATION_YEARS,
+            mortgage_type=MORTGAGE_TYPE,
+            mortgage_term_years=MORTGAGE_TERM_YEARS
+        )
+
+        owner_wealth = add_owner_wealth(
+            schedule_df=schedule,
+            house_price_df=house_price_df
+        )
+
+        owner_cost = add_owner_costs(
+            owner_df=owner_wealth,
+            rent_df=rent_df,
+            property_tax_rate=property_tax_rate,
+            structure_share=structure_share,
+            depreciation_rate=DEPRECIATION_RATE,
+            purchase_cost_rate=PURCHASE_COST_RATE,
+            sale_cost_rate=SALE_COST_RATE
+        )
+
+        owner_cost["scenario_id"] = scenario["scenario_id"]
+        owner_cost["city"] = city
+        owner_cost["down_payment_pct"] = down_payment_rate
+        owner_cost["property_tax_rate"] = property_tax_rate
+        owner_cost["structure_ratio"] = structure_share
+
+        all_results.append(owner_cost)
+
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    owner_cost.to_csv(OUTPUT_PATH, index=False)
 
-    print(owner_cost.head())
-    print(owner_cost.tail())
+    final_results = pd.concat(all_results, ignore_index=True)
+
+    final_results.to_csv(
+        OUTPUT_PATH,
+        index=False
+    )
+
+    print(final_results.head())
+    print(final_results.tail())
     print("\nSaved to:", OUTPUT_PATH)
+    print("Final shape:", final_results.shape)

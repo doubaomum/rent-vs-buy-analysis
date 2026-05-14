@@ -1,0 +1,8 @@
+scenario_id,city,start_date,down_payment_pct,mortgage_type
+1,Canada,2005-01-01,0.20,5-year fixed
+2,Toronto,2005-01-01,0.20,5-year fixed
+3,Vancouver,2005-01-01,0.20,5-year fixed
+4,Calgary,2005-01-01,0.20,5-year fixed
+5,Edmonton,2005-01-01,0.20,5-year fixed
+6,Ottawa,2005-01-01,0.20,5-year fixed
+7,Montreal,2005-01-01,0.20,5-year fixed

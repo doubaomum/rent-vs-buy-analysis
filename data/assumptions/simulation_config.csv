@@ -1,0 +1,14 @@
+category,variable,value,unit
+Time Period,end_date,2025-12-01,date
+House Purchase,amortization_years,25,years
+Mortgage,mortgage_type,5-year fixed,text
+Mortgage,renewal_frequency_years,5,years
+Housing Costs,maintenance_rate_of_rent,0.333,percentage
+Housing Costs,structure_depreciation_rate,0.01,percentage
+Transaction Costs,purchase_cost_rate,0.01,percentage
+Transaction Costs,sale_cost_rate,0.06,percentage
+Renting Behavior,renter_discipline,1,percentage
+Investment Portfolio,portfolio,100% TSX,text
+Investment Portfolio,investment_fee,0.002,percentage
+Investment Portfolio,tax_drag,0.001,percentage
+Rent Assumption,rent_frequency,October annual rent,text
