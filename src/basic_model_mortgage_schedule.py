@@ -9,7 +9,7 @@ HOUSE_PRICE_PATH = Path("data/processed/house/canada_house_real_2005-2025.csv")
 MORTGAGE_RATE_PATH = Path("data/external/Canada Mortgage_5_year_term.csv")
 RENT_PATH = Path("data/processed/rent/canada_rent.csv")
 
-OUTPUT_PATH = Path("data/processed/final/5year_mor_owner_cost_schedule.csv")
+OUTPUT_PATH = Path("data/processed/final/basic_model_owner_cost_schedule.csv")
 
 START_DATE = "2005-01-01"
 END_DATE = "2025-12-01"

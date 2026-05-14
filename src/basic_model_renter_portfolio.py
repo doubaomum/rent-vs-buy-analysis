@@ -5,23 +5,22 @@ from pathlib import Path
 # USER SETTINGS
 # ==================================================
 
-OWNER_COST_PATH = Path("data/processed/final/5year_mor_owner_cost_schedule.csv")
+OWNER_COST_PATH = Path("data/processed/final/basic_model_owner_cost_schedule.csv")
 
 SP500_PATH = Path("data/processed/stock/sp500.csv")
 TSX_PATH = Path("data/processed/stock/tsx.csv")
 
-OUTPUT_PATH = Path("data/processed/final/renter_portfolio_schedule.csv")
+OUTPUT_PATH = Path("data/processed/final/basic_model_renter_portfolio_schedule.csv")
 
-# Choose portfolio scenario:
-# "sp500_only"
-# "tsx_only"
-# "balanced"
-PORTFOLIO_SCENARIO = "balanced"
+# Final basic model setting
+PORTFOLIO_SCENARIO = "tsx_only"   # "tsx_only", "sp500_only", "balanced"
 
 RENTER_DISCIPLINE = 1.00
 
-ANNUAL_FEE = 0.0025
-MONTHLY_FEE = ANNUAL_FEE / 12
+INVESTMENT_FEE = 0.002
+TAX_DRAG = 0.001
+
+MONTHLY_INVESTMENT_COST = (INVESTMENT_FEE + TAX_DRAG) / 12
 
 
 # ==================================================
@@ -31,7 +30,7 @@ MONTHLY_FEE = ANNUAL_FEE / 12
 def load_owner_cost(path):
     df = pd.read_csv(path)
     df["date"] = pd.to_datetime(df["date"])
-    df = df.sort_values("date")
+    df = df.sort_values("date").reset_index(drop=True)
     return df
 
 
@@ -44,6 +43,7 @@ def load_stock_data(sp500_path, tsx_path):
     Load S&P 500 and TSX data.
 
     Expected columns:
+
     sp500.csv:
     - date
     - sp500_price
@@ -99,14 +99,17 @@ def load_stock_data(sp500_path, tsx_path):
     else:
         raise ValueError(
             "PORTFOLIO_SCENARIO must be "
-            "'sp500_only', 'tsx_only', or 'balanced'"
+            "'tsx_only', 'sp500_only', or 'balanced'"
         )
 
     stock["portfolio_return_net"] = (
-        stock["portfolio_return"] - MONTHLY_FEE
+        stock["portfolio_return"] - MONTHLY_INVESTMENT_COST
     )
 
-    return stock[["date", "portfolio_return_net"]]
+    stock = stock[["date", "portfolio_return", "portfolio_return_net"]]
+    stock = stock.dropna()
+
+    return stock
 
 
 # ==================================================
@@ -120,19 +123,33 @@ def generate_renter_portfolio(owner_df, stock_df):
         how="left"
     )
 
+    df["portfolio_return"] = df["portfolio_return"].fillna(0)
     df["portfolio_return_net"] = df["portfolio_return_net"].fillna(0)
 
+    # Owner total monthly cash outflow
+    # Mortgage principal is not an economic cost,
+    # but it is still cash flow that the renter can invest instead.
+    df["owner_total_cash_outflow"] = (
+        df["mortgage_payment"]
+        + df["maintenance_cost"]
+        + df["property_tax"]
+        + df["depreciation_cost"]
+    )
+
     # Renter pays rent.
-    # If owner cost is higher than rent, renter invests the difference.
+    # If owner monthly cash outflow is higher than rent,
+    # renter invests the difference.
     df["monthly_savings_difference"] = (
-        df["owner_monthly_cost"] - df["rent"]
+        df["owner_total_cash_outflow"] - df["rent"]
     )
 
     df["renter_monthly_investment"] = (
-        df["monthly_savings_difference"] * RENTER_DISCIPLINE
+        df["monthly_savings_difference"].clip(lower=0)
+        * RENTER_DISCIPLINE
     )
 
-    # Renter starts with money that owner used for down payment + purchase cost
+    # Renter starts with cash that the buyer used for:
+    # down payment + purchase transaction cost
     initial_cash = (
         df.loc[df.index[0], "down_payment"]
         + df.loc[df.index[0], "purchase_cost"]
@@ -143,13 +160,13 @@ def generate_renter_portfolio(owner_df, stock_df):
 
     for _, row in df.iterrows():
 
-        # Portfolio grows first
         portfolio_value = portfolio_value * (
             1 + row["portfolio_return_net"]
         )
 
-        # Then renter invests or withdraws the monthly difference
-        portfolio_value = portfolio_value + row["renter_monthly_investment"]
+        portfolio_value = (
+            portfolio_value + row["renter_monthly_investment"]
+        )
 
         portfolio_value = max(portfolio_value, 0)
 
@@ -158,9 +175,18 @@ def generate_renter_portfolio(owner_df, stock_df):
     df["renter_portfolio_value"] = portfolio_values
     df["renter_networth"] = df["renter_portfolio_value"]
 
+    df["wealth_difference"] = (
+        df["renter_networth"] - df["owner_networth"]
+    )
+
     df["wealth_ratio"] = (
         df["renter_networth"] / df["owner_networth"]
     )
+
+    df["portfolio_scenario"] = PORTFOLIO_SCENARIO
+    df["renter_discipline"] = RENTER_DISCIPLINE
+    df["investment_fee"] = INVESTMENT_FEE
+    df["tax_drag"] = TAX_DRAG
 
     return df
 
