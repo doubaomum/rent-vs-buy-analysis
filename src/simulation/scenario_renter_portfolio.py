@@ -16,7 +16,6 @@ INVESTMENT_ASSUMPTIONS_PATH = Path(
     "data/assumptions/investment_assumptions.csv"
 )
 # Final basic model setting
-PORTFOLIO_SCENARIO = "tsx_only"   # "tsx_only", "sp500_only", "balanced"
 
 RENTER_DISCIPLINE = 1.00
 
@@ -40,15 +39,8 @@ def load_stock_data(sp500_path, tsx_path):
     """
     Load S&P 500 and TSX data.
 
-    Expected columns:
-
-    sp500.csv:
-    - date
-    - sp500_price
-
-    tsx.csv:
-    - date
-    - tsx_cad
+    This function only calculates raw asset returns.
+    Portfolio selection happens later inside generate_renter_portfolio().
     """
 
     sp500 = pd.read_csv(sp500_path)
@@ -82,25 +74,7 @@ def load_stock_data(sp500_path, tsx_path):
     stock["sp500_return"] = stock["sp500_price"].pct_change()
     stock["tsx_return"] = stock["tsx_cad"].pct_change()
 
-    if PORTFOLIO_SCENARIO == "sp500_only":
-        stock["portfolio_return"] = stock["sp500_return"]
-
-    elif PORTFOLIO_SCENARIO == "tsx_only":
-        stock["portfolio_return"] = stock["tsx_return"]
-
-    elif PORTFOLIO_SCENARIO == "balanced":
-        stock["portfolio_return"] = (
-            0.50 * stock["sp500_return"]
-            + 0.50 * stock["tsx_return"]
-        )
-
-    else:
-        raise ValueError(
-            "PORTFOLIO_SCENARIO must be "
-            "'tsx_only', 'sp500_only', or 'balanced'"
-        )
-
-    stock = stock[["date", "portfolio_return"]]
+    stock = stock[["date", "sp500_return", "tsx_return"]]
     stock = stock.dropna()
 
     return stock
@@ -127,10 +101,28 @@ def generate_renter_portfolio(
         how="left"
     )
 
-    df["portfolio_return"] = df["portfolio_return"].fillna(0)
+    df["sp500_return"] = df["sp500_return"].fillna(0)
+    df["tsx_return"] = df["tsx_return"].fillna(0)    
     monthly_investment_cost = (
         investment_fee + tax_drag
     ) / 12
+    
+    if portfolio_scenario == "sp500_only":
+        df["portfolio_return"] = df["sp500_return"]
+
+    elif portfolio_scenario == "tsx_only":
+        df["portfolio_return"] = df["tsx_return"]
+
+    elif portfolio_scenario == "balanced":
+        df["portfolio_return"] = (
+                0.50 * df["sp500_return"]
+                + 0.50 * df["tsx_return"]
+            )
+
+    else:
+        raise ValueError(
+                "portfolio_scenario must be 'tsx_only', 'sp500_only', or 'balanced'"
+            )
 
     df["portfolio_return_net"] = (
         df["portfolio_return"]
@@ -226,24 +218,24 @@ if __name__ == "__main__":
         print("Scenario ID:", scenario_id)
         print("City:", group["city"].iloc[0])
 
-        portfolio_scenario = "tsx"
+        for _, investment_row in investment_df.iterrows():
 
-        investment_row = investment_df[
-            investment_df["asset"] == portfolio_scenario
-        ].iloc[0]
+            portfolio_scenario = investment_row["asset"]
 
-        investment_fee = investment_row["investment_fee"]
-        tax_drag = investment_row["tax_drag"]
+            investment_fee = investment_row["investment_fee"]
+            tax_drag = investment_row["tax_drag"]
 
-        renter_group = generate_renter_portfolio(
-            owner_df=group,
-            stock_df=stock_df,
-            portfolio_scenario=portfolio_scenario,
-            investment_fee=investment_fee,
-            tax_drag=tax_drag
-        )
+            print("Portfolio:", portfolio_scenario)
 
-        all_results.append(renter_group)
+            renter_group = generate_renter_portfolio(
+                owner_df=group,
+                stock_df=stock_df,
+                portfolio_scenario=portfolio_scenario,
+                investment_fee=investment_fee,
+                tax_drag=tax_drag
+            )
+
+            all_results.append(renter_group)
 
     renter_df = pd.concat(all_results, ignore_index=True)
 
@@ -253,3 +245,4 @@ if __name__ == "__main__":
     print(renter_df.head())
     print(renter_df.tail())
     print("\nSaved to:", OUTPUT_PATH)
+    print("Final shape:", renter_df.shape)
