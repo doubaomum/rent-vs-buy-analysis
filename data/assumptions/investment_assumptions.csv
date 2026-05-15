@@ -1,0 +1,3 @@
+asset,investment_fee,tax_drag,description
+tsx,0.001,0.001,Canadian equity portfolio assumption
+sp500,0.001,0.0025,U.S. equity portfolio assumption from Canadian investor perspective

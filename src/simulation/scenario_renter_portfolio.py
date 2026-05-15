@@ -12,15 +12,13 @@ TSX_PATH = Path("data/processed/stock/tsx.csv")
 
 OUTPUT_PATH = Path("data/processed/final/basic_model_renter_portfolio_schedule.csv")
 
+INVESTMENT_ASSUMPTIONS_PATH = Path(
+    "data/assumptions/investment_assumptions.csv"
+)
 # Final basic model setting
 PORTFOLIO_SCENARIO = "tsx_only"   # "tsx_only", "sp500_only", "balanced"
 
 RENTER_DISCIPLINE = 1.00
-
-INVESTMENT_FEE = 0.002
-TAX_DRAG = 0.001
-
-MONTHLY_INVESTMENT_COST = (INVESTMENT_FEE + TAX_DRAG) / 12
 
 
 # ==================================================
@@ -102,21 +100,27 @@ def load_stock_data(sp500_path, tsx_path):
             "'tsx_only', 'sp500_only', or 'balanced'"
         )
 
-    stock["portfolio_return_net"] = (
-        stock["portfolio_return"] - MONTHLY_INVESTMENT_COST
-    )
-
-    stock = stock[["date", "portfolio_return", "portfolio_return_net"]]
+    stock = stock[["date", "portfolio_return"]]
     stock = stock.dropna()
 
     return stock
 
+def load_investment_assumptions(path):
 
+    df = pd.read_csv(path)
+
+    return df
 # ==================================================
 # GENERATE RENTER PORTFOLIO
 # ==================================================
 
-def generate_renter_portfolio(owner_df, stock_df):
+def generate_renter_portfolio(
+    owner_df,
+    stock_df,
+    portfolio_scenario,
+    investment_fee,
+    tax_drag
+):
     df = owner_df.merge(
         stock_df,
         on="date",
@@ -124,7 +128,15 @@ def generate_renter_portfolio(owner_df, stock_df):
     )
 
     df["portfolio_return"] = df["portfolio_return"].fillna(0)
-    df["portfolio_return_net"] = df["portfolio_return_net"].fillna(0)
+    monthly_investment_cost = (
+        investment_fee + tax_drag
+    ) / 12
+
+    df["portfolio_return_net"] = (
+        df["portfolio_return"]
+        - monthly_investment_cost
+    )
+    df["monthly_investment_cost"] = monthly_investment_cost
 
     # Owner total monthly cash outflow
     # Mortgage principal is not an economic cost,
@@ -183,10 +195,9 @@ def generate_renter_portfolio(owner_df, stock_df):
         df["renter_networth"] / df["owner_networth"]
     )
 
-    df["portfolio_scenario"] = PORTFOLIO_SCENARIO
-    df["renter_discipline"] = RENTER_DISCIPLINE
-    df["investment_fee"] = INVESTMENT_FEE
-    df["tax_drag"] = TAX_DRAG
+    df["portfolio_scenario"] = portfolio_scenario
+    df["investment_fee"] = investment_fee
+    df["tax_drag"] = tax_drag
 
     return df
 
@@ -203,14 +214,33 @@ if __name__ == "__main__":
         sp500_path=SP500_PATH,
         tsx_path=TSX_PATH
     )
+    investment_df = load_investment_assumptions(
+    INVESTMENT_ASSUMPTIONS_PATH
+    )
 
     all_results = []
 
     for scenario_id, group in owner_df.groupby("scenario_id"):
 
+        print("\n=== Running Scenario ===")
+        print("Scenario ID:", scenario_id)
+        print("City:", group["city"].iloc[0])
+
+        portfolio_scenario = "tsx"
+
+        investment_row = investment_df[
+            investment_df["asset"] == portfolio_scenario
+        ].iloc[0]
+
+        investment_fee = investment_row["investment_fee"]
+        tax_drag = investment_row["tax_drag"]
+
         renter_group = generate_renter_portfolio(
             owner_df=group,
-            stock_df=stock_df
+            stock_df=stock_df,
+            portfolio_scenario=portfolio_scenario,
+            investment_fee=investment_fee,
+            tax_drag=tax_drag
         )
 
         all_results.append(renter_group)
