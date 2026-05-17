@@ -1,0 +1,9 @@
+Category,Variable,Value
+Geography,Region,Canada
+Time Period,Start Date,2005-01-01
+Time Period,End Date,2025-12-01
+Renting Behavior,Renter Discipline,1
+Investment Portfolio,Portfolio Type,100% TSX
+Investment Portfolio,Investment Fee,0.10%
+Investment Portfolio,Tax Drag,0.1%(Dynamic by portfolio)
+Rent,Monthly Rent,Dynamic by city

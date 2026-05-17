@@ -1,0 +1,14 @@
+﻿Category,Variable,Value
+Geography,Region,Canada
+Time Period,Start Date,2005-01-01
+Time Period,End Date,2025-12-01
+House Purchase,Down Payment,20%
+House Purchase,Amortization Years,25
+Mortgage,Mortgage Type,5-year fixed
+Housing Costs,Mortgage Interest Rate,Dynamic
+Housing Costs,Property Tax Rate,1% of housing price (dynamic by city)
+Housing Costs,Maintenance Rate,1/3 of rent
+Housing Costs,Depreciation Rate,1% of structure value (dynamic by city)
+Housing Costs,Home Insurance Rate,0.3% of housing price
+Transaction Costs,Purchase Cost Rate,1% of housing price
+Transaction Costs,Sale Cost Rate,6% of housing price

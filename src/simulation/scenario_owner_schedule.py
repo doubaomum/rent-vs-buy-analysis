@@ -25,6 +25,7 @@ MORTGAGE_TERM_YEARS = 5      # fixed mortgage renews every 5 years
 PROPERTY_TAX_RATE = 0.01
 STRUCTURE_SHARE = 0.50 
 DEPRECIATION_RATE = 0.01
+HOME_INSURANCE_RATE = 0.003
 
 PURCHASE_COST_RATE = 0.02
 SALE_COST_RATE = 0.06
@@ -395,11 +396,16 @@ def add_owner_costs(
         df["structure_value"] * depreciation_rate / 12
     )
 
+    df["home_insurance_cost"] = (
+        df["house_price"] * HOME_INSURANCE_RATE / 12
+    )
+
     df["owner_monthly_cost"] = (
         df["mortgage_interest"]
         + df["maintenance_cost"]
         + df["property_tax"]
         + df["depreciation_cost"]
+        + df["home_insurance_cost"]
     )
 
     df["purchase_cost"] = 0.0
