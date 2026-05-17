@@ -15,6 +15,9 @@ OUTPUT_PATH = Path("data/processed/final/basic_model_renter_portfolio_schedule.c
 INVESTMENT_ASSUMPTIONS_PATH = Path(
     "data/assumptions/investment_assumptions.csv"
 )
+investment_df = pd.read_csv(
+    INVESTMENT_ASSUMPTIONS_PATH
+)
 # Final basic model setting
 
 RENTER_DISCIPLINE = 1.00
@@ -187,7 +190,7 @@ def generate_renter_portfolio(
         df["renter_networth"] / df["owner_networth"]
     )
 
-    df["portfolio_scenario"] = portfolio_scenario
+    df["portfolio_name"] = portfolio_scenario
     df["investment_fee"] = investment_fee
     df["tax_drag"] = tax_drag
 
@@ -206,41 +209,48 @@ if __name__ == "__main__":
         sp500_path=SP500_PATH,
         tsx_path=TSX_PATH
     )
+
     investment_df = load_investment_assumptions(
-    INVESTMENT_ASSUMPTIONS_PATH
+        INVESTMENT_ASSUMPTIONS_PATH
     )
 
     all_results = []
 
     for scenario_id, group in owner_df.groupby("scenario_id"):
 
+        city = group["city"].iloc[0]
+        portfolio_scenario = group["portfolio_name"].iloc[0]
+
+        investment_row = investment_df[
+            investment_df["portfolio_name"] == portfolio_scenario
+        ].iloc[0]
+
+        investment_fee = investment_row["investment_fee"]
+        tax_drag = investment_row["tax_drag"]
+
         print("\n=== Running Scenario ===")
         print("Scenario ID:", scenario_id)
-        print("City:", group["city"].iloc[0])
+        print("City:", city)
+        print("Portfolio:", portfolio_scenario)
 
-        for _, investment_row in investment_df.iterrows():
+        renter_group = generate_renter_portfolio(
+            owner_df=group,
+            stock_df=stock_df,
+            portfolio_scenario=portfolio_scenario,
+            investment_fee=investment_fee,
+            tax_drag=tax_drag
+        )
 
-            portfolio_scenario = investment_row["asset"]
-
-            investment_fee = investment_row["investment_fee"]
-            tax_drag = investment_row["tax_drag"]
-
-            print("Portfolio:", portfolio_scenario)
-
-            renter_group = generate_renter_portfolio(
-                owner_df=group,
-                stock_df=stock_df,
-                portfolio_scenario=portfolio_scenario,
-                investment_fee=investment_fee,
-                tax_drag=tax_drag
-            )
-
-            all_results.append(renter_group)
+        all_results.append(renter_group)
 
     renter_df = pd.concat(all_results, ignore_index=True)
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    renter_df.to_csv(OUTPUT_PATH, index=False)
+
+    renter_df.to_csv(
+        OUTPUT_PATH,
+        index=False
+    )
 
     print(renter_df.head())
     print(renter_df.tail())

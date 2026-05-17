@@ -1,4 +1,4 @@
-asset,investment_fee,tax_drag,description
+portfolio_name,investment_fee,tax_drag,description
 tsx_only,0.001,0.001,Canadian equity portfolio
 sp500_only,0.001,0.0025,U.S. equity portfolio from Canadian investor perspective
 balanced,0.001,0.00175,50% TSX and 50% S&P 500 portfolio

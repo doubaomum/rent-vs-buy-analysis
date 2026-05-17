@@ -1,8 +1,22 @@
-scenario_id,city,start_date,down_payment_pct,mortgage_type,property_tax_rate,structure_ratio
-1,Canada,2005-01-01,0.2,5-year fixed,0.01,0.5
-2,Toronto,2005-01-01,0.2,5-year fixed,0.01,0.45
-3,Vancouver,2005-01-01,0.2,5-year fixed,0.008,0.35
-4,Calgary,2005-01-01,0.2,5-year fixed,0.01,0.6
-5,Edmonton,2005-01-01,0.2,5-year fixed,0.01,0.6
-6,Ottawa,2005-01-01,0.2,5-year fixed,0.01,0.5
-7,Montreal,2005-01-01,0.2,5-year fixed,0.01,0.5
+scenario_id,city,start_date,portfolio_name,down_payment_pct,mortgage_type,property_tax_rate,structure_ratio
+1,Canada,2005-01-01,tsx_only,0.2,5-year fixed,0.01,0.5
+2,Canada,2005-01-01,sp500_only,0.2,5-year fixed,0.01,0.5
+3,Canada,2005-01-01,balanced,0.2,5-year fixed,0.01,0.5
+4,Toronto,2005-01-01,tsx_only,0.2,5-year fixed,0.007,0.45
+5,Toronto,2005-01-01,sp500_only,0.2,5-year fixed,0.007,0.45
+6,Toronto,2005-01-01,balanced,0.2,5-year fixed,0.007,0.45
+7,Vancouver,2005-01-01,tsx_only,0.2,5-year fixed,0.003,0.35
+8,Vancouver,2005-01-01,sp500_only,0.2,5-year fixed,0.003,0.35
+9,Vancouver,2005-01-01,balanced,0.2,5-year fixed,0.003,0.35
+10,Calgary,2005-01-01,tsx_only,0.2,5-year fixed,0.007,0.6
+11,Calgary,2005-01-01,sp500_only,0.2,5-year fixed,0.007,0.6
+12,Calgary,2005-01-01,balanced,0.2,5-year fixed,0.007,0.6
+13,Edmonton,2005-01-01,tsx_only,0.2,5-year fixed,0.01,0.6
+14,Edmonton,2005-01-01,sp500_only,0.2,5-year fixed,0.01,0.6
+15,Edmonton,2005-01-01,balanced,0.2,5-year fixed,0.01,0.6
+16,Ottawa,2005-01-01,tsx_only,0.2,5-year fixed,0.012,0.5
+17,Ottawa,2005-01-01,sp500_only,0.2,5-year fixed,0.012,0.5
+18,Ottawa,2005-01-01,balanced,0.2,5-year fixed,0.012,0.5
+19,Montreal,2005-01-01,tsx_only,0.2,5-year fixed,0.008,0.5
+20,Montreal,2005-01-01,sp500_only,0.2,5-year fixed,0.008,0.5
+21,Montreal,2005-01-01,balanced,0.2,5-year fixed,0.008,0.5

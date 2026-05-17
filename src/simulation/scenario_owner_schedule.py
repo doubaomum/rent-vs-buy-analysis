@@ -14,7 +14,6 @@ RENT_DIR = Path("data/processed/rent")
 
 OUTPUT_PATH = Path("data/processed/final/basic_model_owner_cost_schedule.csv")
 
-START_DATE = "2005-01-01"
 END_DATE = "2025-12-01"
 
 DOWN_PAYMENT_RATE = 0.20
@@ -439,6 +438,7 @@ if __name__ == "__main__":
 
         start_date = scenario["start_date"]
         city = scenario["city"]
+        portfolio_name = scenario["portfolio_name"]
         house_price_path = (
             HOUSE_PRICE_DIR
             / f"{city.lower()}_house_price.csv"
@@ -487,6 +487,10 @@ if __name__ == "__main__":
 
         owner_cost["scenario_id"] = scenario["scenario_id"]
         owner_cost["city"] = city
+        owner_cost["portfolio_name"] = portfolio_name
+        owner_cost["start_date"] = start_date
+        owner_cost["end_date"] = END_DATE
+        owner_cost["mortgage_type"] = scenario["mortgage_type"]
         owner_cost["down_payment_pct"] = down_payment_rate
         owner_cost["property_tax_rate"] = property_tax_rate
         owner_cost["structure_ratio"] = structure_share
