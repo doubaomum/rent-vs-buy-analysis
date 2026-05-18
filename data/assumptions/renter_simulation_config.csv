@@ -2,8 +2,16 @@ Category,Variable,Value
 Geography,Region,Canada
 Time Period,Start Date,2005-01-01
 Time Period,End Date,2025-12-01
-Renting Behavior,Renter Discipline,1
+Renting Behavior,Renter Discipline,100%
+Renting Behavior,Rent Growth Mode,Controlled / Market (dynamic by city)
+Renting Behavior,Rent Control Rate,Dynamic by city
+Renting Behavior,Annual Move Probability,Dynamic by city
+Renting Behavior,Move Cost,Dynamic by city and rent level
+Rent,Market Rent,Dynamic by city
+Rent,Actual Renter Rent,Simulated using rent-control and mobility logic
 Investment Portfolio,Portfolio Type,100% TSX
 Investment Portfolio,Investment Fee,0.10%
-Investment Portfolio,Tax Drag,0.1%(Dynamic by portfolio)
-Rent,Monthly Rent,Dynamic by city
+Investment Portfolio,Tax Drag,Dynamic by portfolio
+Investment Portfolio,Monthly Investment Contribution,Owner cost _ renter cost difference
+Investment Portfolio,Portfolio Return,Dynamic by portfolio
+Investment Portfolio,Portfolio Return Net,Portfolio return _ fee _ tax drag
