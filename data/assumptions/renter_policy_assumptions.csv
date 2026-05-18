@@ -1,0 +1,8 @@
+city,rent_growth_mode,rent_control_rate,annual_move_probability,move_cost_multiplier
+Canada,mixed,0.020,0.10,1.2
+Toronto,controlled,0.025,0.08,1.8
+Vancouver,controlled,0.030,0.07,2.0
+Calgary,market,,0.15,1.2
+Edmonton,market,,0.15,1.1
+Ottawa,controlled,0.025,0.09,1.4
+Montreal,controlled,0.025,0.10,1.2
