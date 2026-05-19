@@ -17,9 +17,9 @@ tsx_path = STOCK_DIR / "tsx.csv"
 fx_path = FX_DIR / "usd_cad.csv"
 cpi_path = CPI_DIR / "canada_cpi.csv"
 
-START_DATE = "1990-01-01"
+START_DATE = "1999-01-01"
 END_DATE = "2025-12-01"
-BASE_DATE = "1990-01-01"
+BASE_DATE = "1999-01-01"
 
 
 def standardize_monthly_date(df, date_col="date"):
@@ -73,7 +73,7 @@ canada_house = canada_house[
     (canada_house["date"] <= END_DATE)
 ].copy()
 
-# Normalize Canada house price index to 1990 = 100
+# Normalize Canada house price index to 1999 = 100
 canada_house = normalize_to_base(
     canada_house,
     "canada_house_index_2010",
@@ -124,7 +124,7 @@ base_cpi_series = cpi.loc[
 if base_cpi_series.empty:
     raise ValueError(f"No CPI value found for base date {BASE_DATE}")
 
-base_cpi = base_cpi_series.iloc[0]gi t
+base_cpi = base_cpi_series.iloc[0]
 
 # ============================================================
 # 3. USD/CAD Exchange Rate
@@ -180,7 +180,7 @@ tsx = tsx[
     (tsx["date"] <= END_DATE)
 ].copy()
 
-# Normalize real TSX values to 1990 = 100
+# Normalize real TSX values to 1999 = 100
 tsx = normalize_to_base(
     tsx,
     "tsx_real",
