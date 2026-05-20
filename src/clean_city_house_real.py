@@ -237,26 +237,39 @@ fx["usd_cad"] = fx["usd_cad"].ffill()
 # 9. TSX: Nominal CAD -> Real CAD -> 1999 Index
 # ============================================================
 
-tsx = pd.read_csv(tsx_path)
+# ============================================================
+# 9. TSX: Daily/Monthly Nominal CAD -> Monthly Real CAD -> 1999 Index
+# ============================================================
 
+tsx = pd.read_csv(tsx_path)
 tsx = standardize_monthly_date(tsx, "date")
+
+tsx["tsx_cad"] = (
+    tsx["tsx_cad"]
+    .astype(str)
+    .str.replace(",", "", regex=False)
+)
 
 tsx["tsx_cad"] = pd.to_numeric(tsx["tsx_cad"], errors="coerce")
 
-tsx = tsx.merge(
-    cpi[["date", "cpi"]],
-    on="date",
-    how="left"
+# IMPORTANT: one row per month
+tsx = (
+    tsx
+    .dropna(subset=["tsx_cad"])
+    .sort_values("date")
+    .groupby("date", as_index=False)
+    .last()
 )
 
+tsx = tsx.merge(cpi[["date", "cpi"]], on="date", how="left")
 tsx["cpi"] = tsx["cpi"].ffill()
-
-tsx["tsx_real"] = tsx["tsx_cad"] / tsx["cpi"] * base_cpi
 
 tsx = tsx[
     (tsx["date"] >= START_DATE) &
     (tsx["date"] <= END_DATE)
 ].copy()
+
+tsx["tsx_real"] = tsx["tsx_cad"] / tsx["cpi"] * base_cpi
 
 tsx = normalize_to_base(
     tsx,
@@ -267,46 +280,47 @@ tsx = normalize_to_base(
 
 
 # ============================================================
-# 10. S&P 500: USD -> CAD -> Real CAD -> 1999 Index
+# 10. S&P 500: Daily/Monthly USD -> Monthly CAD -> Real CAD -> 1999 Index
 # ============================================================
 
 sp500 = pd.read_csv(sp500_path)
-
 sp500 = standardize_monthly_date(sp500, "date")
 
-sp500["sp500_price"] = pd.to_numeric(
-    sp500["sp500_price"],
-    errors="coerce"
+sp500["sp500_price"] = (
+    sp500["sp500_price"]
+    .astype(str)
+    .str.replace(",", "", regex=False)
 )
+
+sp500["sp500_price"] = pd.to_numeric(sp500["sp500_price"], errors="coerce")
 
 sp500 = sp500.rename(columns={
     "sp500_price": "sp500_usd"
 })
 
-sp500 = sp500.merge(
-    fx[["date", "usd_cad"]],
-    on="date",
-    how="left"
+# IMPORTANT: one row per month
+sp500 = (
+    sp500
+    .dropna(subset=["sp500_usd"])
+    .sort_values("date")
+    .groupby("date", as_index=False)
+    .last()
 )
 
+sp500 = sp500.merge(fx[["date", "usd_cad"]], on="date", how="left")
 sp500["usd_cad"] = sp500["usd_cad"].ffill()
 
 sp500["sp500_cad"] = sp500["sp500_usd"] * sp500["usd_cad"]
 
-sp500 = sp500.merge(
-    cpi[["date", "cpi"]],
-    on="date",
-    how="left"
-)
-
+sp500 = sp500.merge(cpi[["date", "cpi"]], on="date", how="left")
 sp500["cpi"] = sp500["cpi"].ffill()
-
-sp500["sp500_real"] = sp500["sp500_cad"] / sp500["cpi"] * base_cpi
 
 sp500 = sp500[
     (sp500["date"] >= START_DATE) &
     (sp500["date"] <= END_DATE)
 ].copy()
+
+sp500["sp500_real"] = sp500["sp500_cad"] / sp500["cpi"] * base_cpi
 
 sp500 = normalize_to_base(
     sp500,
@@ -315,7 +329,9 @@ sp500 = normalize_to_base(
     "sp500_real_index_1999"
 )
 
-
+print("TSX duplicate months:", tsx["date"].duplicated().sum())
+print("S&P 500 duplicate months:", sp500["date"].duplicated().sum())
+print("City house duplicate months:", city_house["date"].duplicated().sum())
 # ============================================================
 # 11. Merge Final Dataset
 # ============================================================
