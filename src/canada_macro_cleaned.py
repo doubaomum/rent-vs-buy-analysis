@@ -17,9 +17,9 @@ tsx_path = STOCK_DIR / "tsx.csv"
 fx_path = FX_DIR / "usd_cad.csv"
 cpi_path = CPI_DIR / "canada_cpi.csv"
 
-START_DATE = "1999-01-01"
+START_DATE = "1990-01-01"
 END_DATE = "2025-12-01"
-BASE_DATE = "1999-01-01"
+BASE_DATE = "1990-01-01"
 
 
 def standardize_monthly_date(df, date_col="date"):
