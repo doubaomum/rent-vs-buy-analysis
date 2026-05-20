@@ -22,15 +22,15 @@ tsx_path = STOCK_DIR / "tsx.csv"
 fx_path = FX_DIR / "usd_cad.csv"
 cpi_path = CPI_DIR / "canada_cpi.csv"
 
-output_path = OUTPUT_DIR / "city_house_canada_real_1999_index.csv"
+output_path = OUTPUT_DIR / "city_house_canada_stock_holding_period.csv"
 
 # ============================================================
-# 2. Analysis Period
+# 2. Dynamic Start Year + Holding Period
 # ============================================================
 
-START_DATE = "1999-02-01"
-END_DATE = "2025-12-01"
-BASE_DATE = START_DATE
+START_YEARS = [2000, 2005, 2010, 2015, 2020]
+HOLDING_PERIODS = [5, 10, 15, 20, 25]
+FINAL_YEAR = 2025
 
 
 # ============================================================
@@ -60,6 +60,15 @@ def normalize_to_base(df, value_col, base_date, new_col):
     return df
 
 
+def make_monthly_last(df, value_cols):
+    return (
+        df.dropna(subset=value_cols)
+        .sort_values("date")
+        .groupby("date", as_index=False)
+        .last()
+    )
+
+
 # ============================================================
 # 4. Load and Clean CPI Data
 # ============================================================
@@ -80,23 +89,7 @@ cpi["date"] = pd.to_datetime(cpi["date"], format="%b-%y", errors="coerce").filln
 
 cpi["date"] = cpi["date"].dt.to_period("M").dt.to_timestamp()
 cpi["cpi"] = pd.to_numeric(cpi["cpi"], errors="coerce")
-
 cpi = cpi.dropna(subset=["date", "cpi"]).copy()
-
-cpi = cpi[
-    (cpi["date"] >= START_DATE) &
-    (cpi["date"] <= END_DATE)
-].copy()
-
-base_cpi_series = cpi.loc[
-    cpi["date"] == pd.to_datetime(BASE_DATE),
-    "cpi"
-].dropna()
-
-if base_cpi_series.empty:
-    raise ValueError(f"No CPI value found for base date {BASE_DATE}")
-
-base_cpi = base_cpi_series.iloc[0]
 
 
 # ============================================================
@@ -127,7 +120,7 @@ for col in city_columns:
 
 
 # ============================================================
-# 6. Convert City Nominal Indexes to Real Indexes
+# 6. Convert City Nominal Indexes to Real Values
 # ============================================================
 
 city_house = city_house.merge(
@@ -138,23 +131,9 @@ city_house = city_house.merge(
 
 city_house["cpi"] = city_house["cpi"].ffill()
 
-city_house = city_house[
-    (city_house["date"] >= START_DATE) &
-    (city_house["date"] <= END_DATE)
-].copy()
-
 for col in city_columns:
     real_col = f"{col}_real"
-    index_col = f"{col}_real_index_1999"
-
-    city_house[real_col] = city_house[col] / city_house["cpi"] * base_cpi
-
-    city_house = normalize_to_base(
-        city_house,
-        real_col,
-        BASE_DATE,
-        index_col
-    )
+    city_house[real_col] = city_house[col] / city_house["cpi"]
 
 
 # ============================================================
@@ -194,18 +173,6 @@ canada_house = (
     .reset_index()
 )
 
-canada_house = canada_house[
-    (canada_house["date"] >= START_DATE) &
-    (canada_house["date"] <= END_DATE)
-].copy()
-
-canada_house = normalize_to_base(
-    canada_house,
-    "canada_house_real",
-    BASE_DATE,
-    "canada_house_real_index_1999"
-)
-
 
 # ============================================================
 # 8. USD/CAD Exchange Rate
@@ -219,7 +186,6 @@ fx = fx.rename(columns={
 })
 
 fx = standardize_monthly_date(fx, "date")
-
 fx["usd_cad"] = pd.to_numeric(fx["usd_cad"], errors="coerce")
 
 fx = (
@@ -234,11 +200,7 @@ fx["usd_cad"] = fx["usd_cad"].ffill()
 
 
 # ============================================================
-# 9. TSX: Nominal CAD -> Real CAD -> 1999 Index
-# ============================================================
-
-# ============================================================
-# 9. TSX: Daily/Monthly Nominal CAD -> Monthly Real CAD -> 1999 Index
+# 9. TSX: Daily/Monthly Nominal CAD -> Monthly Real CAD
 # ============================================================
 
 tsx = pd.read_csv(tsx_path)
@@ -252,35 +214,20 @@ tsx["tsx_cad"] = (
 
 tsx["tsx_cad"] = pd.to_numeric(tsx["tsx_cad"], errors="coerce")
 
-# IMPORTANT: one row per month
-tsx = (
-    tsx
-    .dropna(subset=["tsx_cad"])
-    .sort_values("date")
-    .groupby("date", as_index=False)
-    .last()
+tsx = make_monthly_last(tsx, ["tsx_cad"])
+
+tsx = tsx.merge(
+    cpi[["date", "cpi"]],
+    on="date",
+    how="left"
 )
 
-tsx = tsx.merge(cpi[["date", "cpi"]], on="date", how="left")
 tsx["cpi"] = tsx["cpi"].ffill()
-
-tsx = tsx[
-    (tsx["date"] >= START_DATE) &
-    (tsx["date"] <= END_DATE)
-].copy()
-
-tsx["tsx_real"] = tsx["tsx_cad"] / tsx["cpi"] * base_cpi
-
-tsx = normalize_to_base(
-    tsx,
-    "tsx_real",
-    BASE_DATE,
-    "tsx_real_index_1999"
-)
+tsx["tsx_real"] = tsx["tsx_cad"] / tsx["cpi"]
 
 
 # ============================================================
-# 10. S&P 500: Daily/Monthly USD -> Monthly CAD -> Real CAD -> 1999 Index
+# 10. S&P 500: Daily/Monthly USD -> Monthly CAD -> Real CAD
 # ============================================================
 
 sp500 = pd.read_csv(sp500_path)
@@ -298,123 +245,250 @@ sp500 = sp500.rename(columns={
     "sp500_price": "sp500_usd"
 })
 
-# IMPORTANT: one row per month
-sp500 = (
-    sp500
-    .dropna(subset=["sp500_usd"])
-    .sort_values("date")
-    .groupby("date", as_index=False)
-    .last()
+sp500 = make_monthly_last(sp500, ["sp500_usd"])
+
+sp500 = sp500.merge(
+    fx[["date", "usd_cad"]],
+    on="date",
+    how="left"
 )
 
-sp500 = sp500.merge(fx[["date", "usd_cad"]], on="date", how="left")
 sp500["usd_cad"] = sp500["usd_cad"].ffill()
 
 sp500["sp500_cad"] = sp500["sp500_usd"] * sp500["usd_cad"]
 
-sp500 = sp500.merge(cpi[["date", "cpi"]], on="date", how="left")
+sp500 = sp500.merge(
+    cpi[["date", "cpi"]],
+    on="date",
+    how="left"
+)
+
 sp500["cpi"] = sp500["cpi"].ffill()
+sp500["sp500_real"] = sp500["sp500_cad"] / sp500["cpi"]
 
-sp500 = sp500[
-    (sp500["date"] >= START_DATE) &
-    (sp500["date"] <= END_DATE)
-].copy()
 
-sp500["sp500_real"] = sp500["sp500_cad"] / sp500["cpi"] * base_cpi
-
-sp500 = normalize_to_base(
-    sp500,
-    "sp500_real",
-    BASE_DATE,
-    "sp500_real_index_1999"
-)
-
-print("TSX duplicate months:", tsx["date"].duplicated().sum())
-print("S&P 500 duplicate months:", sp500["date"].duplicated().sum())
-print("City house duplicate months:", city_house["date"].duplicated().sum())
 # ============================================================
-# 11. Merge Final Dataset
+# 11. Dynamic Scenario Generation
 # ============================================================
 
-final_df = city_house.merge(
-    canada_house[
-        [
-            "date",
+all_results = []
+
+for start_year in START_YEARS:
+
+    for holding_period in HOLDING_PERIODS:
+
+        end_year = start_year + holding_period
+
+        if end_year > FINAL_YEAR:
+            continue
+
+        start_date = pd.to_datetime(f"{start_year}-01-01")
+        end_date = pd.to_datetime(f"{end_year}-12-01")
+        base_date = start_date
+
+        # ----------------------------------------------------
+        # Canada Housing
+        # ----------------------------------------------------
+
+        canada_filtered = canada_house[
+            (canada_house["date"] >= start_date) &
+            (canada_house["date"] <= end_date)
+        ].copy()
+
+        canada_filtered = normalize_to_base(
+            canada_filtered,
             "canada_house_real",
-            "canada_house_real_index_1999"
-        ]
-    ],
-    on="date",
-    how="left"
-)
+            base_date,
+            "canada_house_real_index"
+        )
 
-final_df = final_df.merge(
-    tsx[
-        [
-            "date",
-            "tsx_cad",
+        # ----------------------------------------------------
+        # TSX
+        # ----------------------------------------------------
+
+        tsx_filtered = tsx[
+            (tsx["date"] >= start_date) &
+            (tsx["date"] <= end_date)
+        ].copy()
+
+        tsx_filtered = normalize_to_base(
+            tsx_filtered,
             "tsx_real",
-            "tsx_real_index_1999"
-        ]
-    ],
-    on="date",
-    how="left"
-)
+            base_date,
+            "tsx_real_index"
+        )
 
-final_df = final_df.merge(
-    sp500[
-        [
-            "date",
-            "sp500_usd",
-            "usd_cad",
-            "sp500_cad",
+        # ----------------------------------------------------
+        # S&P 500
+        # ----------------------------------------------------
+
+        sp500_filtered = sp500[
+            (sp500["date"] >= start_date) &
+            (sp500["date"] <= end_date)
+        ].copy()
+
+        sp500_filtered = normalize_to_base(
+            sp500_filtered,
             "sp500_real",
-            "sp500_real_index_1999"
-        ]
-    ],
-    on="date",
-    how="left"
-)
+            base_date,
+            "sp500_real_index"
+        )
 
-final_columns = [
-    "date",
-    "canada_house_real",
-    "canada_house_real_index_1999",
-    "tsx_cad",
-    "tsx_real",
-    "tsx_real_index_1999",
-    "sp500_usd",
-    "usd_cad",
-    "sp500_cad",
-    "sp500_real",
-    "sp500_real_index_1999",
+        # ----------------------------------------------------
+        # City Housing
+        # ----------------------------------------------------
+
+        city_filtered = city_house[
+            (city_house["date"] >= start_date) &
+            (city_house["date"] <= end_date)
+        ].copy()
+
+        for col in city_columns:
+            real_col = f"{col}_real"
+            index_col = f"{col}_real_index"
+
+            city_filtered = normalize_to_base(
+                city_filtered,
+                real_col,
+                base_date,
+                index_col
+            )
+
+        # ----------------------------------------------------
+        # Merge Scenario
+        # ----------------------------------------------------
+
+        scenario_df = canada_filtered[
+            [
+                "date",
+                "canada_house_real_index"
+            ]
+        ].copy()
+
+        scenario_df = scenario_df.merge(
+            tsx_filtered[
+                [
+                    "date",
+                    "tsx_real_index"
+                ]
+            ],
+            on="date",
+            how="left"
+        )
+
+        scenario_df = scenario_df.merge(
+            sp500_filtered[
+                [
+                    "date",
+                    "sp500_real_index"
+                ]
+            ],
+            on="date",
+            how="left"
+        )
+
+        city_index_columns = [
+            f"{col}_real_index"
+            for col in city_columns
+        ]
+
+        scenario_df = scenario_df.merge(
+            city_filtered[
+                ["date"] + city_index_columns
+            ],
+            on="date",
+            how="left"
+        )
+
+        # ----------------------------------------------------
+        # Add Metadata
+        # ----------------------------------------------------
+
+        scenario_df["start_year"] = start_year
+        scenario_df["holding_period"] = holding_period
+        scenario_df["end_year"] = end_year
+        scenario_df["scenario_label"] = f"{start_year} + {holding_period}Y"
+
+        all_results.append(scenario_df)
+
+
+# ============================================================
+# 12. Combine All Scenarios
+# ============================================================
+
+final_df = pd.concat(all_results, ignore_index=True)
+
+# ============================================================
+# 13. Unpivot for Power BI
+# ============================================================
+
+asset_columns = [
+    "canada_house_real_index",
+    "tsx_real_index",
+    "sp500_real_index",
 ]
 
-for col in city_columns:
-    final_columns.extend([
-        col,
-        f"{col}_real",
-        f"{col}_real_index_1999"
-    ])
+city_index_columns = [
+    f"{col}_real_index"
+    for col in city_columns
+]
 
-final_df = final_df[final_columns].copy()
-final_df = final_df.sort_values("date")
+final_df = final_df.melt(
+    id_vars=[
+        "date",
+        "start_year",
+        "holding_period",
+        "end_year",
+        "scenario_label"
+    ],
+    value_vars=asset_columns + city_index_columns,
+    var_name="Attribute",
+    value_name="Value"
+)
 
+asset_name_map = {
+    "canada_house_real_index": "Canada Housing",
+    "tsx_real_index": "TSX",
+    "sp500_real_index": "S&P 500 (CAD)",
+    "bc_vancouver_real_index": "Vancouver",
+    "on_toronto_real_index": "Toronto",
+    "qc_montreal_real_index": "Montreal",
+    "ab_calgary_real_index": "Calgary",
+    "on_ottawa_real_index": "Ottawa",
+    "ab_edmonton_real_index": "Edmonton",
+}
+
+final_df["asset"] = final_df["Attribute"].map(asset_name_map)
 
 # ============================================================
-# 12. Save Final Dataset
+# 14. Save
 # ============================================================
 
 final_df.to_csv(output_path, index=False)
 
-print("\nDone!")
-print(f"Saved to: {output_path}")
+parameter_table = []
 
+for start_year in START_YEARS:
+    for holding_period in HOLDING_PERIODS:
+        end_year = start_year + holding_period
+        if end_year <= FINAL_YEAR:
+            parameter_table.append({
+                "start_year": start_year,
+                "holding_period": holding_period,
+                "end_year": end_year,
+                "scenario_label": f"{start_year} + {holding_period}Y"
+            })
+
+parameter_df = pd.DataFrame(parameter_table)
+
+parameter_output_path = OUTPUT_DIR / "start_year_holding_period_city_parameter.csv"
+parameter_df.to_csv(parameter_output_path, index=False)
+
+print("\nDone!")
+print(f"Saved main dataset to: {output_path}")
+print(f"Saved parameter table to: {parameter_output_path}")
 print("\nPreview:")
 print(final_df.head())
-
-print("\nTail:")
-print(final_df.tail())
 
 print("\nInfo:")
 print(final_df.info())
