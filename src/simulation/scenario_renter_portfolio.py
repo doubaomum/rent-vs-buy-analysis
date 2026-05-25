@@ -12,16 +12,12 @@ SP500_PATH = Path("data/processed/stock/sp500.csv")
 TSX_PATH = Path("data/processed/stock/tsx.csv")
 
 RENTER_POLICY_PATH = Path("data/assumptions/renter_policy_assumptions.csv")
+INVESTMENT_ASSUMPTIONS_PATH = Path("data/assumptions/investment_assumptions.csv")
 
 OUTPUT_PATH = Path("data/processed/final/basic_model_renter_portfolio_schedule.csv")
 
-INVESTMENT_ASSUMPTIONS_PATH = Path(
-    "data/assumptions/investment_assumptions.csv"
-)
-
-# Final basic model setting
-
-RENTER_DISCIPLINE = 1.00
+DEFAULT_RENTER_DISCIPLINE = 1.00
+RANDOM_SEED = 42
 
 
 # ==================================================
@@ -29,30 +25,70 @@ RENTER_DISCIPLINE = 1.00
 # ==================================================
 
 def load_owner_cost(path):
+    """
+    Load owner schedule with scenario metadata.
+
+    Expected important columns:
+    - scenario_id
+    - city
+    - portfolio_name
+    - start_date
+    - end_date
+    - holding_years
+    - renter_discipline
+    - date
+    """
+
     df = pd.read_csv(path)
+
     df["date"] = pd.to_datetime(df["date"])
-    df = df.sort_values("date").reset_index(drop=True)
+
+    if "start_date" in df.columns:
+        df["start_date"] = pd.to_datetime(df["start_date"])
+
+    if "end_date" in df.columns:
+        df["end_date"] = pd.to_datetime(df["end_date"])
+
+    df = df.sort_values(
+        ["scenario_id", "date"]
+    ).reset_index(drop=True)
+
     return df
+
+
+# ==================================================
+# LOAD RENTER POLICY DATA
+# ==================================================
 
 def load_renter_policy(path):
+    """
+    Load renter policy assumptions.
+
+    Expected columns:
+    - city
+    - rent_growth_mode
+    - rent_control_rate
+    - annual_move_probability
+    - move_cost_multiplier
+    """
+
     df = pd.read_csv(path)
 
-    df["rent_control_rate"] = pd.to_numeric(
-        df["rent_control_rate"],
-        errors="coerce"
-    )
+    numeric_cols = [
+        "rent_control_rate",
+        "annual_move_probability",
+        "move_cost_multiplier"
+    ]
 
-    df["annual_move_probability"] = pd.to_numeric(
-        df["annual_move_probability"],
-        errors="coerce"
-    )
-
-    df["move_cost_multiplier"] = pd.to_numeric(
-        df["move_cost_multiplier"],
-        errors="coerce"
-    )
+    for col in numeric_cols:
+        df[col] = pd.to_numeric(
+            df[col],
+            errors="coerce"
+        )
 
     return df
+
+
 # ==================================================
 # LOAD STOCK DATA
 # ==================================================
@@ -101,39 +137,67 @@ def load_stock_data(sp500_path, tsx_path):
 
     return stock
 
+
+# ==================================================
+# LOAD INVESTMENT ASSUMPTIONS
+# ==================================================
+
 def load_investment_assumptions(path):
+    """
+    Load investment assumptions.
+
+    Expected columns:
+    - portfolio_name
+    - investment_fee
+    - tax_drag
+    """
 
     df = pd.read_csv(path)
 
+    df["portfolio_name"] = (
+        df["portfolio_name"]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+
+    df["investment_fee"] = pd.to_numeric(
+        df["investment_fee"],
+        errors="coerce"
+    )
+
+    df["tax_drag"] = pd.to_numeric(
+        df["tax_drag"],
+        errors="coerce"
+    )
+
     return df
+
+
 # ==================================================
-# GENERATE RENTER PORTFOLIO
+# PORTFOLIO RETURN SELECTION
 # ==================================================
 
-def generate_renter_portfolio(
-    owner_df,
-    stock_df,
-    renter_policy_df,
+def add_portfolio_return(
+    df,
     portfolio_scenario,
     investment_fee,
     tax_drag
 ):
-    df = owner_df.merge(
-        stock_df,
-        on="date",
-        how="left"
-    )
+    """
+    Add selected portfolio return and net return.
 
-    df = df.merge(
-        renter_policy_df,
-        on="city",
-        how="left"
-    )
+    Supported portfolio_scenario:
+    - tsx_only
+    - sp500_only
+    - balanced
+    """
 
-    df["sp500_return"] = df["sp500_return"].fillna(0)
-    df["tsx_return"] = df["tsx_return"].fillna(0)
+    portfolio_scenario = str(portfolio_scenario).strip().lower()
 
-    monthly_investment_cost = (investment_fee + tax_drag) / 12
+    monthly_investment_cost = (
+        investment_fee + tax_drag
+    ) / 12
 
     if portfolio_scenario == "sp500_only":
         df["portfolio_return"] = df["sp500_return"]
@@ -149,7 +213,8 @@ def generate_renter_portfolio(
 
     else:
         raise ValueError(
-            "portfolio_scenario must be 'tsx_only', 'sp500_only', or 'balanced'"
+            "portfolio_scenario must be 'tsx_only', 'sp500_only', or 'balanced'. "
+            f"Current value: {portfolio_scenario}"
         )
 
     df["portfolio_return_net"] = (
@@ -157,47 +222,123 @@ def generate_renter_portfolio(
     )
 
     df["monthly_investment_cost"] = monthly_investment_cost
+    df["investment_fee"] = investment_fee
+    df["tax_drag"] = tax_drag
 
-    # Owner total monthly cash outflow
+    return df
+
+
+# ==================================================
+# GENERATE RENTER PORTFOLIO
+# ==================================================
+
+def generate_renter_portfolio(
+    owner_df,
+    stock_df,
+    renter_policy_df,
+    portfolio_scenario,
+    investment_fee,
+    tax_drag
+):
+    """
+    Generate renter-investor portfolio for one scenario_id.
+
+    Scenario logic:
+    - portfolio_scenario comes from owner_df["portfolio_name"]
+    - renter_discipline comes from owner_df["renter_discipline"]
+    - holding period comes from the owner schedule date range
+    """
+
+    df = owner_df.merge(
+        stock_df,
+        on="date",
+        how="left"
+    )
+
+    df = df.merge(
+        renter_policy_df,
+        on="city",
+        how="left"
+    )
+
+    df["sp500_return"] = df["sp500_return"].fillna(0)
+    df["tsx_return"] = df["tsx_return"].fillna(0)
+
+    df = add_portfolio_return(
+        df=df,
+        portfolio_scenario=portfolio_scenario,
+        investment_fee=investment_fee,
+        tax_drag=tax_drag
+    )
+
+    if "renter_discipline" in df.columns:
+        renter_discipline = df["renter_discipline"].iloc[0]
+    else:
+        renter_discipline = DEFAULT_RENTER_DISCIPLINE
+
+    if pd.isna(renter_discipline):
+        renter_discipline = DEFAULT_RENTER_DISCIPLINE
+
+    renter_discipline = float(renter_discipline)
+
+    # Owner total monthly cash outflow.
+    # Mortgage principal is not an economic cost,
+    # but it is still a real monthly cash outflow.
+    required_owner_cashflow_cols = [
+        "mortgage_payment",
+        "maintenance_cost",
+        "property_tax",
+        "depreciation_cost",
+        "home_insurance_cost"
+    ]
+
+    for col in required_owner_cashflow_cols:
+        if col not in df.columns:
+            df[col] = 0.0
+
     df["owner_total_cash_outflow"] = (
         df["mortgage_payment"]
         + df["maintenance_cost"]
         + df["property_tax"]
         + df["depreciation_cost"]
+        + df["home_insurance_cost"]
     )
 
     # ==============================
     # Renter rent-control logic
     # ==============================
 
-    df = df.sort_values(["city", "date"]).reset_index(drop=True)
+    df = df.sort_values(["scenario_id", "city", "date"]).reset_index(drop=True)
 
-    df["month_number"] = df.groupby("city").cumcount()
+    df["month_number"] = df.groupby(["scenario_id", "city"]).cumcount()
 
-    # Stochastic assumption:
-    # renter may move each month based on city-level annual move probability
-    np.random.seed(42)
-
-    # convert annual probability to monthly probability
+    # Convert annual moving probability to monthly probability.
     df["monthly_move_probability"] = (
         df["annual_move_probability"] / 12
     )
 
-    # random move simulation
-    df["random_move"] = np.random.rand(len(df))
+    # Random move simulation.
+    # Seed is scenario-specific so results are reproducible but not identical across scenarios.
+    scenario_id = df["scenario_id"].iloc[0]
+    rng = np.random.default_rng(RANDOM_SEED + int(scenario_id))
+
+    df["random_move"] = rng.random(len(df))
 
     df["renter_moves"] = (
-        df["random_move"]
-        < df["monthly_move_probability"]
+        df["random_move"] < df["monthly_move_probability"]
     )
+
     df.loc[df["month_number"] == 0, "renter_moves"] = False
 
     actual_rents = []
 
-    for city, city_df in df.groupby("city", sort=False):
-        previous_rent = city_df.iloc[0]["rent"]
+    # Group by scenario and city to avoid rent carry-over across scenarios.
+    for _, group_df in df.groupby(["scenario_id", "city"], sort=False):
 
-        for i, row in city_df.iterrows():
+        previous_rent = group_df.iloc[0]["rent"]
+
+        for i, row in group_df.iterrows():
+
             market_rent = row["rent"]
 
             if row["month_number"] == 0:
@@ -231,55 +372,70 @@ def generate_renter_portfolio(
     )
 
     df["renter_total_cash_outflow"] = (
-        df["actual_renter_rent"] + df["move_cost"]
+        df["actual_renter_rent"]
+        + df["move_cost"]
     )
 
     # If owner cash outflow is higher than renter cost,
     # renter invests the difference.
+    # If renter cost is higher, the extra cash outflow is deducted from portfolio.
     df["monthly_savings_difference"] = (
         df["owner_total_cash_outflow"]
         - df["renter_total_cash_outflow"]
     )
 
+    df["renter_monthly_investment_before_discipline"] = (
+        df["monthly_savings_difference"].clip(lower=0)
+    )
+
     df["renter_monthly_investment"] = (
-        df["monthly_savings_difference"]
-        * RENTER_DISCIPLINE
+        df["renter_monthly_investment_before_discipline"]
+        * renter_discipline
+    )
+
+    df["renter_extra_cash_outflow"] = (
+        (-df["monthly_savings_difference"]).clip(lower=0)
     )
 
     initial_cash = (
-        df.loc[df.index[0], "down_payment"]
-        + df.loc[df.index[0], "purchase_cost"]
+        df.iloc[0]["down_payment"]
+        + df.iloc[0]["purchase_cost"]
     )
 
     portfolio_value = initial_cash
     portfolio_values = []
 
     for _, row in df.iterrows():
+
         portfolio_value = portfolio_value * (
             1 + row["portfolio_return_net"]
         )
 
         portfolio_value = (
-            portfolio_value + row["renter_monthly_investment"]
+            portfolio_value
+            + row["renter_monthly_investment"]
+            - row["renter_extra_cash_outflow"]
         )
 
         portfolio_value = max(portfolio_value, 0)
+
         portfolio_values.append(portfolio_value)
 
     df["renter_portfolio_value"] = portfolio_values
     df["renter_networth"] = df["renter_portfolio_value"]
 
     df["wealth_difference"] = (
-        df["renter_networth"] - df["owner_networth"]
+        df["renter_networth"]
+        - df["owner_networth_after_sale"]
     )
 
     df["wealth_ratio"] = (
-        df["renter_networth"] / df["owner_networth"]
+        df["renter_networth"]
+        / df["owner_networth_after_sale"]
     )
 
     df["portfolio_name"] = portfolio_scenario
-    df["investment_fee"] = investment_fee
-    df["tax_drag"] = tax_drag
+    df["renter_discipline"] = renter_discipline
 
     return df
 
@@ -310,19 +466,35 @@ if __name__ == "__main__":
     for scenario_id, group in owner_df.groupby("scenario_id"):
 
         city = group["city"].iloc[0]
-        portfolio_scenario = group["portfolio_name"].iloc[0]
+        portfolio_scenario = (
+            str(group["portfolio_name"].iloc[0])
+            .strip()
+            .lower()
+        )
 
         investment_row = investment_df[
             investment_df["portfolio_name"] == portfolio_scenario
-        ].iloc[0]
+        ]
 
-        investment_fee = investment_row["investment_fee"]
-        tax_drag = investment_row["tax_drag"]
+        if investment_row.empty:
+            raise ValueError(
+                f"No investment assumptions found for portfolio: {portfolio_scenario}"
+            )
 
-        print("\n=== Running Scenario ===")
+        investment_fee = investment_row["investment_fee"].iloc[0]
+        tax_drag = investment_row["tax_drag"].iloc[0]
+
+        renter_discipline = (
+            group["renter_discipline"].iloc[0]
+            if "renter_discipline" in group.columns
+            else DEFAULT_RENTER_DISCIPLINE
+        )
+
+        print("\n=== Running Renter Scenario ===")
         print("Scenario ID:", scenario_id)
         print("City:", city)
         print("Portfolio:", portfolio_scenario)
+        print("Renter Discipline:", renter_discipline)
 
         renter_group = generate_renter_portfolio(
             owner_df=group,
@@ -334,6 +506,9 @@ if __name__ == "__main__":
         )
 
         all_results.append(renter_group)
+
+    if not all_results:
+        raise ValueError("No renter scenarios were generated.")
 
     renter_df = pd.concat(all_results, ignore_index=True)
 
