@@ -1,589 +1,741 @@
-# Data Cleaning and Preprocessing
+# Data Cleaning, Transformation, and Preparation
+
+**Project:** Rent vs Buy in Canada
+**Scope:** Source ingestion through Power BI-ready outputs
+
+---
 
 ## 1. Overview
 
-This document describes the data cleaning and preprocessing workflow used in the **Rent vs Buy in Canada** project. It is one of three companion documents: `data_sources.md` describes the raw inputs, this file describes how they were cleaned and transformed, and `key_findings.md` reports the results.
+This document describes the data cleaning, transformation, and preparation workflow used in the **Rent vs Buy in Canada** project.
 
-The project combines housing, equity-market, inflation, exchange-rate, mortgage-rate, and rental-market datasets from multiple public sources. Because these datasets use different formats, frequencies, currencies, and index bases, a standardized preprocessing workflow was required before analysis in Python and Power BI.
+The project combines housing, equity-market, inflation, exchange-rate, mortgage-rate, and rental-market data from multiple public sources. These datasets differ in structure, frequency, currency, geographic coverage, and reporting convention, so they must be standardized before they can support asset-performance analysis, financial simulation, and Power BI reporting.
 
-A key design choice is that the analysis uses **two different types of housing data**:
+The architecture uses **PostgreSQL as the central storage and transformation layer**. Python handles only the state-dependent monthly calculations that are difficult to express efficiently in SQL — mortgage amortization and portfolio compounding, where each month depends on the result of the previous one.
 
-1. **Indexed housing data** for macro asset-return comparison (report pages 1–4).
-2. **Actual benchmark housing prices in Canadian dollars** for the owner-versus-renter simulation (report pages 5–11).
-
-This distinction matters because indexed housing data is appropriate for comparing relative growth across assets, while dollar-based housing prices are required for mortgage calculations, down payments, ownership costs, sale proceeds, and net-worth simulation.
-
-This document covers data processing for pages 1–11. The remaining report pages introduce no new data — page 12 presents conclusions and pages 13–14 document modeling methodology — so they are out of scope here.
-
----
-
-## 2. Data Cleaning Workflow
-
-The cleaning workflow followed four main stages:
+### 1.1 Data flow
 
 ```text
 Raw source files
-    ↓
-Initial Excel pre-cleaning
-    ↓
-Python / pandas cleaning and transformation
-    ↓
-Final analysis datasets for Power BI
+      ↓
+raw schema  ──────────→  raw-data validation
+      ↓
+stg schema  ──────────→  staging-data validation
+      ↓
+analysis schema  ─────→  real asset indexes, CAGR, long-format inputs
+      ↓
+simulation schema  ───→  scenario generation, monthly schedules
+      ↓
+Python simulation engines  →  mortgage amortization, renter portfolio
+      ↓
+Power BI reporting
 ```
 
-The goal was to convert every dataset into a consistent, analysis-ready time series with standardized column names, date formats, numeric values, and monthly frequency where required.
+### 1.2 Two analytical tracks
 
----
+The project deliberately separates two purposes:
 
-## 3. Initial Pre-Cleaning in Excel
+| Track | Question | Data used |
+|---|---|---|
+| **Market-level asset analysis** | How have housing and equities performed in real terms over the long run? | Inflation-adjusted, rebased index series |
+| **Household-level rent-vs-buy simulation** | Would a specific household have been better off buying or renting-and-investing? | Actual dollar prices, rents, mortgage costs, and portfolio returns |
 
-Some raw files contained metadata, notes, descriptive headers, unused columns, or wide-format tables. Before Python processing, a light Excel pre-cleaning step was applied to simplify these files.
+The first track compares assets. The second models the financial experience of an individual homeowner and an individual renter-investor. Keeping them separate is what allows the project to use indexed series where comparability matters and actual dollar values where cash-flow realism matters.
 
-The Excel pre-cleaning steps included:
+### 1.3 Division of responsibility
 
-- removing descriptive text, footnotes, and metadata rows,
-- keeping only the relevant variables and geographic series,
-- removing unnecessary adjusted or smoothed versions of series,
-- standardizing the general date and value layout,
-- organizing files into a cleaner chronological structure,
-- saving cleaned source extracts for Python processing.
-
-This step reduced parsing errors and made the Python workflow easier to maintain.
-
----
-
-## 4. Python Cleaning Standards
-
-After the initial Excel cleanup, the main cleaning and transformation workflow was performed in Python using pandas.
-
-### 4.1 Column Name Standardization
-
-Different source files used different date and value column names, such as:
-
-```text
-Date
-TIME_PERIOD
-Transaction Date
-observation_date
-VALUE
-Adj Close
-```
-
-These were renamed into consistent, analysis-friendly column names such as:
-
-```text
-date
-city
-value
-rent
-vacancy_rate
-usd_cad
-sp500_usd
-tsx_cad
-```
-
-This allowed datasets from different sources to be merged on consistent keys.
-
-### 4.2 Date Formatting
-
-All date columns were converted to pandas datetime format and aligned to a monthly timestamp where needed:
-
-```python
-df["date"] = pd.to_datetime(df["date"])
-df["date"] = df["date"].dt.to_period("M").dt.to_timestamp()
-```
-
-This produced a consistent monthly date format:
-
-```text
-YYYY-MM-01
-```
-
-### 4.3 Numeric Conversion
-
-Some source values were stored as text because of commas, percent symbols, missing-value markers, or formatting from downloaded CSV files. These were cleaned and converted to numeric format:
-
-```python
-df["value"] = pd.to_numeric(df["value"], errors="coerce")
-```
-
-Cleaned values included stock index levels with thousands separators, mortgage-rate percentages, rent values, vacancy rates, exchange rates, and housing price index values. Values that could not be parsed were coerced to `NaN` and then handled as missing (Section 4.4).
-
-### 4.4 Missing Values
-
-Missing observations were handled based on the type of dataset and the analysis purpose.
-
-Forward-fill was used where it was reasonable to carry the latest available observation forward, such as:
-
-- quarterly housing indices converted to monthly frequency,
-- annual rent observations aligned to monthly simulations,
-- missing exchange-rate observations around non-trading days,
-- mortgage-rate observations aligned to monthly schedules.
-
-Example:
-
-```python
-df = df.set_index("date").resample("MS").ffill().reset_index()
-```
-
-Forward-fill was chosen carefully: it preserves the most recently observed market condition without inventing a trend between observations.
-
----
-
-## 5. Frequency Alignment
-
-The raw datasets were reported at different frequencies:
-
-| Dataset Type | Original Frequency | Processed Frequency |
-|---|---:|---:|
-| BIS national housing index | Quarterly | Monthly-aligned |
-| City-level housing index | Monthly | Monthly |
-| CREA benchmark prices | Monthly / available reporting frequency | Monthly |
-| Yahoo Finance equity data | Daily or monthly download | Monthly |
-| FRED USD/CAD exchange rate | Daily | Monthly average |
-| Statistics Canada CPI | Monthly | Monthly |
-| Statistics Canada mortgage rates | Monthly | Monthly |
-| CMHC rent and vacancy data | Annual October snapshot | Monthly forward-filled |
-
-A monthly timeline was used because the rent-versus-buy model requires monthly mortgage payments, rent payments, investment contributions, and portfolio updates.
-
----
-
-## 6. Macro Indexed Data Processing: Report Pages 1–4
-
-Report pages 1–4 use indexed, inflation-adjusted data to compare long-term asset performance. These pages answer questions such as:
-
-- How did Canadian housing perform compared with the TSX and S&P 500?
-- How sensitive were results to entry year and holding period?
-- How did city-level housing growth differ across Canadian markets?
-- Which cities competed most strongly against equities over different horizons?
-
-### 6.1 Canada Housing vs Stock Market Dataset: Pages 1–2
-
-The Canada-wide macro comparison includes:
-
-- Canada national residential property price index,
-- S&P/TSX Composite Index,
-- S&P 500 Index,
-- USD/CAD exchange rate,
-- Canadian CPI.
-
-The common analysis period begins in **January 1990**, because the TSX dataset begins in 1990. All final series were normalized to:
-
-```text
-January 1990 = 100
-```
-
-#### Canada Housing Index
-
-The BIS Canada residential property price series is already a real housing price index. Its original base is:
-
-```text
-2010 = 100
-```
-
-For comparison with equities, it was rebased to 1990 = 100:
-
-```text
-Housing Index (1990 = 100) = Current Housing Index / Housing Index at 1990 × 100
-```
-
-Because the BIS series is quarterly, it was converted to a monthly-aligned series using forward-fill.
-
-#### TSX Processing
-
-The TSX is denominated in Canadian dollars, so no currency conversion was required.
-
-Processing steps:
-
-- clean the date and value columns,
-- convert index values to numeric format,
-- filter the dataset to the 1990–2025 period,
-- convert nominal TSX values into real values using Canadian CPI,
-- rebase the real TSX series to 1990 = 100.
-
-Inflation adjustment formula:
-
-```text
-Real TSX = Nominal TSX / CPI × CPI_base
-```
-
-Here `CPI_base` is the CPI value in the reference base period (Statistics Canada uses 2002 = 100). This expresses each series in constant reference-period dollars before it is rebased to 1990 = 100.
-
-#### S&P 500 Processing
-
-The S&P 500 is denominated in U.S. dollars, so it was first converted into Canadian dollars using the USD/CAD exchange rate:
-
-```text
-S&P 500 CAD = S&P 500 USD × USD/CAD
-```
-
-After currency conversion, the CAD S&P 500 was converted into real terms using Canadian CPI and then rebased to 1990 = 100. This allowed the S&P 500 to be evaluated from a Canadian investor perspective.
-
----
-
-### 6.2 City-Level Housing Dataset: Pages 3–4
-
-The city-level housing comparison includes Vancouver, Toronto, Montreal, Calgary, Edmonton, Ottawa, and the Canada benchmark where applicable.
-
-The city-level housing index is nominal and uses a source base of:
-
-```text
-2005-06 = 100
-```
-
-Because not all city series have full 1990 coverage, the common city-level comparison period was set to **1999–2025**.
-
-Processing steps:
-
-1. Standardize monthly dates.
-2. Convert city index values into numeric format.
-3. Merge Canadian CPI.
-4. Convert nominal city housing indices into real values.
-5. Rebase each city series to 1999 = 100:
-
-```text
-City Real Housing Index (1999 = 100)
-= Current Real City Index / Real City Index at 1999 × 100
-```
-
-This produced consistent inflation-adjusted city-level growth series for regional comparison.
-
----
-
-### 6.3 Indexed Growth and CAGR Calculation
-
-For pages 1–4, indexed values were calculated as:
-
-```text
-Indexed Value = Current Value / Base Value × 100
-```
-
-Compound annual growth rate was calculated as:
-
-```text
-CAGR = (Ending Value / Beginning Value)^(1 / Number of Years) - 1
-```
-
-Because the macro comparison uses real values, these CAGR figures represent inflation-adjusted annualized growth.
-
----
-
-## 7. Simulation Data Processing: Report Pages 5–11
-
-Report pages 5–11 use dollar-based monthly simulation data rather than indexed housing data, because the model calculates actual Canadian-dollar quantities:
-
-- purchase price,
-- down payment,
-- mortgage principal,
-- mortgage payment,
-- interest cost,
-- ownership cost,
-- rent payment,
-- investment contribution,
-- portfolio value,
-- sale proceeds,
-- owner net worth,
-- renter net worth.
-
-The simulation is reported in **nominal CAD**, not inflation-adjusted index values.
-
-### 7.1 Actual Benchmark Housing Price Processing
-
-Actual benchmark housing price data was cleaned separately from the indexed housing datasets.
-
-Processing steps:
-
-1. Standardize date and geography fields.
-2. Convert benchmark prices to numeric CAD values.
-3. Align all cities to the monthly simulation timeline.
-4. Merge city-level house prices into the owner and renter simulation schedules.
-5. Use the benchmark price at the purchase month as the starting home value.
-6. Track the benchmark price path over the holding period to estimate sale value.
-
-This dataset is the basis for mortgage principal, homeowner equity, and final sale proceeds.
-
-### 7.2 Mortgage Rate Processing
-
-Mortgage-rate data was cleaned and aligned to monthly simulation dates.
-
-Processing steps:
-
-- remove metadata and unnecessary rows,
-- convert the rate values into numeric format,
-- standardize monthly dates,
-- align rates with purchase and renewal months,
-- apply the historical rate to the base scenario,
-- create sensitivity versions using:
-
-```text
-Lower rate scenario = Historical rate - 2 percentage points
-Base rate scenario  = Historical rate
-Higher rate scenario = Historical rate + 2 percentage points
-```
-
-The ±2 percentage-point scenarios are applied to the mortgage renewal schedule as sensitivity tests, not forecasts.
-
-### 7.3 Rent and Vacancy Processing
-
-CMHC rent and vacancy data are reported annually, usually as an October snapshot. To use these values in a monthly simulation, the annual observations were converted to monthly frequency using forward-fill.
-
-Processing steps:
-
-1. Select the relevant cities.
-2. Select 2-bedroom rent as the main rent measure.
-3. Clean rent and vacancy values.
-4. Standardize annual observation dates.
-5. Convert annual rent and vacancy data to monthly frequency.
-6. Merge monthly rent and vacancy series into the renter simulation schedule.
-
-Example:
-
-```python
-rent_monthly = rent.set_index("date").resample("MS").ffill().reset_index()
-```
-
-The simulation distinguishes between:
-
-- **market rent** — the prevailing rent for a new renter,
-- **effective paid rent** — the rent actually paid by an existing tenant under rent-control and moving assumptions.
-
-### 7.4 Portfolio Return Processing
-
-Equity-market return data was used for the renter-investor portfolio.
-
-Processing steps:
-
-- convert equity prices to monthly values,
-- convert S&P 500 values from USD to CAD,
-- calculate monthly portfolio returns,
-- apply investment fees,
-- apply portfolio-specific tax-drag assumptions,
-- produce net monthly portfolio returns.
-
-The final report uses two portfolio scenarios:
-
-| Portfolio Scenario | Description |
+| Tool | Role |
 |---|---|
-| TSX portfolio | Base-case renter portfolio |
-| S&P 500 portfolio | Sensitivity scenario |
+| **PostgreSQL** | Data storage, cleaning, transformation, scenario generation, static monthly inputs |
+| **Python** | Stateful monthly simulation, including mortgage amortization and renewal, renter mobility and effective rent paths, monthly cash-flow differences, portfolio compounding, and inflation-adjusted net worth calculations |
+| **Power BI** | Interactive analysis, sensitivity filtering, visualization |
 
-### 7.5 Scenario Input Processing
+Power BI does not recreate the underlying financial simulation. It consumes calculated PostgreSQL simulation outputs and uses DAX primarily for reporting and interactive aggregation.
 
-Scenario inputs were organized into structured parameter tables before simulation. Scenario dimensions include:
+---
 
-- city,
-- purchase year,
-- holding period,
-- interest-rate scenario,
-- renter discipline,
-- portfolio type.
+## 2. Database Architecture
 
-The scenario table lets the Python model generate multiple owner and renter schedules in a consistent, repeatable way.
+The database is organized into four layers, each with a distinct responsibility.
 
-### 7.6 Net Worth Indexing for Cross-City Comparison
+| Schema | Responsibility |
+|---|---|
+| `raw` | Source data, imported with minimal transformation |
+| `stg` | Cleaned, type-cast, standardized tables |
+| `analysis` | Real indexes, CAGR tables, long-format simulation inputs |
+| `simulation` | Scenario definitions and monthly schedules |
 
-The simulation outputs are reported in nominal Canadian dollars, but a direct dollar comparison of owner and renter net worth across cities can mislead, because each city has a different starting home price. Since the homeowner's initial capital is a 20% down payment, higher-priced cities require a larger initial dollar amount than lower-priced cities.
+### 2.1 Raw layer
 
-To compare outcomes on a consistent baseline, the final Power BI measures transform both owner and renter net worth into indexed values. The selected start date — for example `2005-01-01` in the base simulation view — is set equal to:
+The `raw` schema preserves source-level data so that every downstream transformation remains traceable to an unmodified original.
+
+Raw datasets:
+
+- Canada national residential property price index (BIS)
+- City-level housing price indices
+- City-level benchmark housing prices
+- S&P 500
+- TSX
+- VT
+- City-level rent data
+- Canada CPI
+- USD/CAD exchange rate
+- Canada 5-year mortgage rate
+
+Source CSV files are imported using `psql \copy`. Most raw columns are typed as `text` rather than `numeric` or `date`, so that a malformed value fails at the cleaning step — where it can be inspected — rather than at the import step, where it would abort the whole load.
+
+City-level housing and rent files arrive as one file per city with no city column. These are loaded through temporary tables (`raw.tmp_house_price`, `raw.tmp_rent_raw`) and then inserted into consolidated tables with a standardized city identifier attached.
+
+### 2.2 Staging layer
+
+The `stg` schema standardizes raw datasets into consistent, correctly typed tables:
 
 ```text
-Start date = 100
+stg.canada_house_price_index_2010_100
+stg.city_house_price_index
+stg.city_house_prices
+stg.city_indexed_house_prices
+stg.sp500_usd
+stg.tsx_cad
+stg.vt_usd
+stg.city_rent
+stg.canada_cpi
+stg.usd_cad
+stg.canada_5yearmortgage
 ```
 
-This focuses the comparison on relative wealth growth rather than absolute starting amounts, so cities with very different house prices can be compared fairly in the same visual.
+Typical transformations: standardizing date formats, trimming whitespace, removing thousands separators, converting empty strings to `NULL`, casting numeric text to `NUMERIC`, pivoting city-level data from long to wide, and removing invalid observations.
 
-The indexed owner net worth measure:
+The recurring cleaning idiom is:
 
-```DAX
-Net Worth Index Owner =
-VAR StartDate =
-    CALCULATE(
-        MIN(basic_model_renter_portfolio_schedule_new[date]),
-        ALLSELECTED(basic_model_renter_portfolio_schedule_new[date])
-    )
-
-VAR StartValue =
-    CALCULATE(
-        MAX(basic_model_renter_portfolio_schedule_new[owner_networth_after_sale]),
-        REMOVEFILTERS(basic_model_renter_portfolio_schedule_new[date]),
-        basic_model_renter_portfolio_schedule_new[date] = StartDate
-    )
-
-VAR CurrentValue =
-    MAX(basic_model_renter_portfolio_schedule_new[owner_networth_after_sale])
-
-RETURN
-DIVIDE(CurrentValue, StartValue) * 100
+```sql
+NULLIF(REPLACE(TRIM(column_name), ',', ''), '')::NUMERIC
 ```
 
-The indexed renter net worth measure:
+This handles the three problems that appear together in most source files. For example, the text value `"6,729.60"` becomes the numeric `6729.60`, while an empty cell becomes `NULL` instead of raising a cast error.
 
-```DAX
-Net Worth Index Renter =
-VAR StartDate =
-    CALCULATE(
-        MIN(basic_model_renter_portfolio_schedule_new[date]),
-        ALLSELECTED(basic_model_renter_portfolio_schedule_new[date])
-    )
+---
 
-VAR StartValue =
-    CALCULATE(
-        MAX(basic_model_renter_portfolio_schedule_new[renter_networth]),
-        REMOVEFILTERS(basic_model_renter_portfolio_schedule_new[date]),
-        basic_model_renter_portfolio_schedule_new[date] = StartDate
-    )
+## 3. Data Validation
 
-VAR CurrentValue =
-    MAX(basic_model_renter_portfolio_schedule_new[renter_networth])
+Validation runs at both the raw and staging stages, before data reaches analysis or simulation.
 
-RETURN
-DIVIDE(CurrentValue, StartValue) * 100
-```
+Checks performed:
 
-In both measures, the date filter is removed only when retrieving the start value, while city and scenario filters remain active — so each city and scenario is indexed relative to its own starting net worth.
-
-The indexed wealth gap is then:
+- row counts per table
+- minimum and maximum dates
+- city coverage (all seven expected markets present, with plausible row counts)
+- duplicate dates
+- duplicate city-date combinations
+- missing key fields
+- unexpected gaps in historical coverage
 
 ```text
-Indexed Wealth Gap = Owner Net Worth Index - Renter Net Worth Index
+Load  →  row count  →  date range  →  city coverage  →  duplicates  →  next layer
 ```
 
-A positive gap indicates homeowner outperformance; a negative value indicates renter-investor outperformance. This indexed approach is used in all owner-versus-renter comparison visuals because it places every city and scenario on a comparable starting baseline.
+Duplicate checks matter most for time-series tables. A single duplicated date silently fans out every downstream join, inflating row counts and distorting return calculations and simulation results in ways that are difficult to trace backwards.
+
+Making these checks explicit SQL files rather than informal visual review means they can be rerun after any source refresh.
 
 ---
 
-## 8. Dataset Merging
+## 4. Date Standardization
 
-After cleaning individual datasets, the project merged them into analysis datasets using the monthly `date` column and, where relevant, the `city` column.
+The project combines datasets reported at different frequencies:
 
-Typical merge keys:
+| Dataset | Original frequency |
+|---|---|
+| Canada national housing index | Quarterly |
+| City housing indices | Monthly |
+| Benchmark housing prices | Monthly |
+| Equity-market data | Daily / monthly |
+| USD/CAD | Daily |
+| CPI | Monthly |
+| Mortgage rates | Monthly |
+| Rent data | Annual |
+
+All dates are cast to PostgreSQL `DATE` and exposed through a single field name, `date_period`, so that tables join consistently. Monthly observations use the first day of the month:
 
 ```text
-date
-city
-date + city
-scenario_id
+2005-01-01
+2005-02-01
+2005-03-01
 ```
 
-Main merge logic:
-
-- macro comparison datasets are merged by `date`,
-- city housing datasets are merged by `date` and `city`,
-- rent and house-price data are merged by `date` and `city`,
-- simulation schedules are merged by scenario identifiers and monthly dates.
-
-A left-join approach was generally used, with one dataset serving as the base timeline:
-
-```python
-df = city_house.merge(cpi, on="date", how="left")
-df = df.merge(stock_returns, on="date", how="left")
-```
+The simulation layer operates entirely on this monthly timeline.
 
 ---
 
-## 9. Final Analysis Outputs
+## 5. Currency Standardization
 
-The cleaning workflow generated two broad groups of outputs.
+The project evaluates outcomes from the perspective of a Canadian investor, so U.S.-denominated assets are converted to Canadian dollars before any comparison or simulation.
 
-### 9.1 Macro Comparison Outputs
-
-Supporting report pages 1–4:
-
-- Canada housing vs stock market real index dataset,
-- city-level real housing index dataset,
-- indexed growth datasets by start year and holding period,
-- CAGR summary tables,
-- winner matrices for housing versus equity-market comparison.
-
-Example output files:
+The USD/CAD series is interpreted as **CAD per USD**, so conversion is a multiplication:
 
 ```text
-canada_house_vs_stocks_real_1990_index.csv
-city_house_real_1999_index.csv
+S&P 500 (CAD) = S&P 500 (USD) × USD/CAD
 ```
 
-### 9.2 Simulation Outputs
+VT is converted the same way.
 
-Supporting report pages 5–11:
-
-- homeowner monthly schedule,
-- renter-investor monthly schedule,
-- owner and renter combined scenario dataset,
-- scenario summary tables,
-- sensitivity-impact tables,
-- Power BI-ready outputs for visualization.
-
-The simulation outputs are structured so that Power BI slicers can filter by city, purchase year, holding period, portfolio, renter discipline, and interest-rate scenario.
+Equity markets and foreign-exchange markets do not share a trading calendar, so an exact date join would drop observations. Instead, each market observation is matched to the **most recent USD/CAD rate on or before** that date, implemented as a `LEFT JOIN LATERAL` with `ORDER BY date_period DESC LIMIT 1`. This is a backward-looking match only: it never uses an exchange rate that would not yet have been observable.
 
 ---
 
-## 10. Validation Checks
+## 6. Inflation Adjustment
 
-Several validation checks were applied before loading the datasets into Power BI.
+Canadian CPI is the inflation measure throughout. The general form is:
 
-### 10.1 Date Coverage Checks
+```text
+Real Value = Nominal Value × Base CPI ÷ Current CPI
+```
 
-Each final dataset was checked against its expected analysis period:
+The choice of base differs by context:
 
-- macro Canada comparison: 1990–2025,
-- city-level housing comparison: 1999–2025,
-- rent-versus-buy simulation: 2005–2025.
+| Context | CPI base |
+|---|---|
+| Asset index construction | Fixed common base for the series |
+| Household simulation | Each scenario's own starting month |
 
-### 10.2 Missing Value Checks
+Scenario-specific bases are used in the simulation because each household's purchasing power should be expressed in the dollars of the year they bought, not in the dollars of an arbitrary shared reference year.
 
-The final datasets were checked for missing values in key fields: house price, rent, mortgage rate, portfolio return, CPI, USD/CAD exchange rate, owner net worth, and renter net worth.
-
-### 10.3 Scenario Consistency Checks
-
-Scenario tables were checked to confirm that combinations of city, start year, holding period, portfolio, renter discipline, and interest-rate scenario were generated consistently.
-
-### 10.4 Result Reasonableness Checks
-
-Final outputs were reviewed for unreasonable values, such as:
-
-- negative mortgage balances,
-- missing final values,
-- unrealistic rent jumps not explained by rent-reset logic,
-- owner or renter net worth that did not align with the underlying price and return path,
-- sensitivity results that did not respond logically to rate, discipline, or portfolio changes.
+The analysis spans several decades. Without CPI adjustment, a large share of the apparent growth in house prices, equity values, and household net worth would simply be general price inflation rather than real gain.
 
 ---
 
-## 11. Power BI Preparation
+## 7. Analysis Layer
 
-Before import into Power BI, final datasets were organized to support dashboard filtering and visualization. Key steps:
+The `analysis` schema turns staging data into two kinds of output: **real asset indexes with CAGR tables** for the market-level track, and **long-format price and rent tables** for the simulation track.
 
-- keeping fields in a tidy long-table structure where possible,
-- preserving scenario identifiers,
-- using consistent city names across tables,
-- creating fields for asset name, scenario name, and report labels,
-- exporting final CSV files for Power BI import,
-- checking that slicers could filter the intended visuals.
+### 7.1 Canada national housing
 
-The datasets were designed so that Python served as the calculation engine and Power BI as the interactive visualization layer.
+The BIS Canada-wide residential property price index is published in **real (inflation-adjusted) terms**, so no CPI deflation is applied. The series is rebased from 2010 = 100 to **1990 = 100**, producing `analysis.canada_house_price_index_1990_100`. This gives housing and equities a common real starting point for long-horizon comparison.
+
+### 7.2 S&P 500
+
+```text
+USD price → convert to CAD → deflate by Canadian CPI → rebase to 1990 = 100
+```
+
+Result: `analysis.sp500_index_1990_100`. The table retains `price_usd`, `price_cad`, `price_cad_real`, and `price_index_cad_real`, so downstream consumers can select nominal or real values as appropriate.
+
+### 7.3 TSX
+
+The TSX is already in Canadian dollars, so no currency conversion is needed:
+
+```text
+Nominal TSX → deflate by Canadian CPI → rebase to 1990 = 100
+```
+
+Result: `analysis.tsx_index_1990_100`.
+
+### 7.4 VT
+
+VT is converted from USD to CAD and deflated by Canadian CPI, producing `analysis.vt_cad_real`. It is not rebased, because it is used for supporting analysis rather than long-horizon index comparison — its history begins in 2008, far later than the other series.
+
+VT remains available in the analytical database but is **not** one of the two portfolio options in the final renter simulation.
+
+### 7.5 City-level real housing index
+
+Cities covered: Canada (national), Vancouver, Calgary, Edmonton, Toronto, Ottawa, Montreal.
+
+Nominal city house-price indices are deflated by Canadian CPI and rebased to **January 2005 = 100**, producing `analysis.city_indexed_house_prices`. The real S&P 500 and TSX series are rebased to the same January 2005 anchor and appended as additional columns, so housing and equity performance can be read off a single real indexed scale.
+
+January 2005 is used as the common analytical base so that all city housing series and equity benchmarks can be compared consistently over the main 2005–2025 analysis window.
 
 ---
 
-## 12. Limitations of the Cleaning Process
+## 8. CAGR Analysis
 
-Several limitations remain after preprocessing:
+Compound annual growth rates are calculated across every available start date and several holding horizons:
 
-- Source datasets have different historical start dates, requiring different comparison windows.
-- Quarterly and annual datasets were aligned to monthly frequency using forward-fill, which improves consistency but does not create new within-period observations.
-- CMHC rent data is annual and may not capture monthly rent volatility.
-- Housing indices and benchmark prices represent market averages and do not capture individual property variation.
-- Stock-market results depend on index choice, dividend treatment, currency conversion, and time period.
-- Macro pages use real, inflation-adjusted data while simulation pages use nominal CAD, so the two should not be read on the same scale.
+```text
+CAGR = (Ending Value / Beginning Value) ^ (1 / Holding Years) − 1
+```
+
+Each table is built by cross-joining a list of holding periods against the source series, then self-joining forward by `MAKE_INTERVAL(years => holding_years)` to locate the matching end observation.
+
+| Table | Source | Basis | Horizons |
+|---|---|---|---|
+| `analysis.canada_house_cagr` | `stg.canada_house_price_index_2010_100` | Real (source series) | 5 / 10 / 15 / 20 / 25 / 30 / 35 |
+| `analysis.sp500_cagr` | `analysis.sp500_index_1990_100` | Real CAD | 5 / 10 / 15 / 20 / 25 / 30 / 35 |
+| `analysis.tsx_cagr` | `analysis.tsx_index_1990_100` | Real CAD | 5 / 10 / 15 / 20 / 25 / 30 / 35 |
+| `analysis.vt_cagr` | `analysis.vt_cad_real` | Real CAD | 5 / 10 / 15 / 18 |
+| `analysis.city_house_cagr` | `analysis.city_indexed_house_prices` | Real, 2005 = 100 | 5 / 10 / 15 / 20 |
+
+All five tables are on a real basis, so growth rates are directly comparable across assets. The national housing series arrives inflation-adjusted from the source; the equity and city-level series are deflated by Canadian CPI during index construction (§7).
+
+Annual start observations are taken from Q1 for the quarterly national series and from January for all monthly series.
+
+City-level horizons stop at 20 years because benchmark price coverage begins in 2005. Equity and national housing series support up to 35 years.
+
+`analysis.sum_canada_stock_cagr` joins the national housing, S&P 500, TSX, and city-level CAGR tables on start year and holding period, producing a single wide table for Power BI heatmaps by start year × holding period × asset.
 
 ---
 
-## 13. Summary
+## 9. Simulation Input Preparation
 
-The data cleaning process transformed several heterogeneous public datasets into a consistent analytical framework.
+The simulation uses **actual dollar-denominated house prices and rents**, not indexed series. Mortgage and household-finance calculations require real magnitudes: purchase price, down payment, principal, interest, maintenance, property tax, insurance, rent, contributions, portfolio value, sale proceeds, and net worth.
 
-For report pages 1–4, the workflow created real, inflation-adjusted indexed datasets for long-term housing and equity-market comparison.
+City-level prices and rents are unpivoted into long format:
 
-For report pages 5–11, it created nominal monthly simulation datasets using actual house prices, rents, mortgage rates, and portfolio returns. Power BI then indexed owner and renter net worth to a common start-date baseline so cities with different initial home prices could be compared consistently.
+```text
+analysis.city_house_prices_long   (date_period, city, price)
+analysis.city_rent_long           (date_period, city, price)
+```
 
-This separation between **indexed macro analysis** and **dollar-based simulation analysis** is the foundation of the project: it lets the report compare housing with equities at the market level while also modeling the household-level financial tradeoff between buying and renting.
+`NULL` values are filtered out during the unpivot, so absent city-months simply do not appear rather than propagating as missing rows.
+
+---
+
+## 10. Owner Scenario Generation
+
+Owner scenarios are generated in PostgreSQL as `simulation.owner_basic_model`, one row per combination of:
+
+| Dimension | Values |
+|---|---|
+| City | 7 markets |
+| Purchase date | Every month with both a purchase and a matching sale observation |
+| Holding period | 5 / 10 / 15 / 20 years |
+| Down payment | 10% / 20% / 30% |
+| Mortgage-rate scenario | Lower / Base / Higher |
+
+Mortgage-rate scenarios shift the historical 5-year rate:
+
+```text
+Lower  = historical rate − 2 percentage points
+Base   = historical rate
+Higher = historical rate + 2 percentage points
+```
+
+The shifted rate is floored at zero, so the Lower scenario cannot produce a negative mortgage rate in periods when historical rates were already below 2%.
+
+### 10.1 Down payment scope
+
+All three down-payment levels remain in PostgreSQL, but the **final report fixes down payment at 20%**. See §21 for the reasoning.
+
+One consequence is worth stating explicitly: mortgage default insurance is modeled at 3.1% of the loan and applies only when the down payment is 10%. At the reported 20% level, **mortgage insurance is zero** and the final loan equals the pre-insurance loan. This matches Canadian practice, where insurance is required only below 20% down.
+
+---
+
+## 11. Owner Monthly Schedule
+
+`simulation.owner_monthly_schedule` expands each scenario into one row per month from **month 0** through the sale month, generated with `generate_series`.
+
+Static monthly inputs computed in SQL:
+
+- house market value for that month
+- estimated current sale cost (market value × 6%)
+- mortgage term number and renewal timing
+- applied mortgage rate for the current term
+- structure value
+- maintenance, property tax, and insurance costs
+- sale-month flag
+
+PostgreSQL produces the timeline and every value that depends only on that month. Python then computes the values that depend on prior months.
+
+### 11.1 Data horizon
+
+The simulation uses historical source data through **2025-12-01**.
+
+Available purchase dates and holding-period combinations are therefore constrained by the historical data window. Completed historical outcomes should only be evaluated for scenarios whose intended holding period is fully supported by the available housing, rent, mortgage-rate, CPI, and market-return data.
+
+This prevents incomplete recent scenarios from being interpreted as completed rent-versus-buy outcomes.
+
+---
+
+## 12. Mortgage Calculation
+
+Performed month by month in Python.
+
+```text
+Amortization = 25 years
+Term         = 5 years
+```
+
+### 12.1 Payment recalculation
+
+The payment is recalculated at month 1 and at each five-year renewal — months 61, 121, 181, and so on — using the historical 5-year rate prevailing at that renewal, adjusted by the scenario's rate shift:
+
+```text
+Payment = Balance × r / [1 − (1 + r)^(−n)]
+
+r = monthly mortgage rate  (annual rate ÷ 100 ÷ 12)
+n = remaining amortization months
+```
+
+At renewal the payment is recalculated on the **then-current balance over the remaining amortization**, not the original 25 years. This reproduces how Canadian mortgage renewal actually works: the amortization clock keeps running across terms.
+
+A 0% rate is handled separately as straight-line repayment, avoiding division by zero.
+
+### 12.2 Monthly mechanics
+
+```text
+Interest  = Beginning Balance × Monthly Rate
+Payment   = min(Scheduled Payment, Beginning Balance + Interest)
+Principal = min(max(Payment − Interest, 0), Beginning Balance)
+Balance   = Beginning Balance − Principal
+```
+
+The two clamps prevent the final payment from exceeding the outstanding obligation and guarantee the balance terminates at exactly zero rather than drifting negative through floating-point accumulation.
+
+Month 0 carries the initial balance with no payment, interest, or principal.
+
+### 12.3 Principal is not a cost
+
+Mortgage principal is excluded from unrecoverable ownership cost because it converts directly into home equity. It is a transfer between two of the household's own accounts, not an expense. It does appear in cash outflow (§17), because the household must still fund it each month.
+
+---
+
+## 13. Maintenance Cost
+
+Maintenance applies to the **structural portion** of the property, not the full market value, because land does not depreciate or require upkeep.
+
+```text
+Structure Value    = House Market Value × Structure Ratio
+Monthly Maintenance = Structure Value × 1.5% ÷ 12
+```
+
+Structure ratios vary by city because the land share of property value differs sharply across Canadian markets:
+
+| City | Structure ratio |
+|---|---:|
+| Canada | 0.50 |
+| Toronto | 0.45 |
+| Vancouver | 0.35 |
+| Calgary | 0.60 |
+| Edmonton | 0.60 |
+| Ottawa | 0.50 |
+| Montreal | 0.50 |
+
+Vancouver's low ratio reflects land dominating property value there; applying a flat maintenance rate to total value would materially overstate ownership cost in exactly the markets where housing is most expensive.
+
+---
+
+## 14. Property Tax
+
+```text
+Monthly Property Tax = House Market Value × City Property Tax Rate ÷ 12
+```
+
+| City | Annual rate |
+|---|---:|
+| Canada | 1.00% |
+| Toronto | 0.70% |
+| Vancouver | 0.30% |
+| Calgary | 0.70% |
+| Edmonton | 1.00% |
+| Ottawa | 1.20% |
+| Montreal | 0.80% |
+
+Because the calculation uses the simulated market value each month, property-tax expense rises and falls with housing values over the holding period rather than staying fixed at the purchase-price level.
+
+---
+
+## 15. Home Insurance
+
+```text
+Monthly Insurance = House Market Value × 0.3% ÷ 12
+```
+
+Unlike maintenance, insurance is currently calculated using the **full simulated house market value** rather than the estimated structure value.
+
+---
+
+## 16. Owner Unrecoverable Cost
+
+Monthly unrecoverable ownership cost:
+
+```text
+Mortgage Interest + Maintenance + Property Tax + Insurance
+```
+
+Principal is deliberately excluded (§12.3).
+
+Two one-time additions:
+
+| Timing | Addition | Rate |
+|---|---|---|
+| Month 0 | Purchase cost | 2% of purchase price |
+| Sale month | Sale cost | 6% of sale price |
+
+The model also accumulates these into `cumulative_unrecoverable_cost` across the holding period.
+
+---
+
+## 17. Owner Net Worth
+
+```text
+Owner Net Worth
+= Current House Market Value
+− Remaining Mortgage Balance
+− Estimated Current Sale Cost
+```
+
+Estimated current sale cost is 6% of the current market value, representing the transaction cost the owner would incur to convert the asset to cash at that moment. Including it means owner net worth is stated on a liquidation-equivalent basis, directly comparable to the renter's portfolio value.
+
+**Cumulative unrecoverable cost is not subtracted from net worth.** Those costs already enter the comparison through monthly cash flow: every dollar the owner spends on interest, maintenance, tax, or insurance is a dollar not available for the renter's portfolio, and the savings difference (§19) captures that. Subtracting them a second time from the owner's balance sheet would double-count the same expense.
+
+---
+
+## 18. Renter Scenario Preparation
+
+Each renter scenario is linked to an existing owner scenario, inheriting city, purchase date, holding period, the housing value path, the mortgage schedule, owner cash outflow, and owner net worth. It then adds market rent, rent-control assumptions, moving probability and cost, portfolio choice, investment fees, and tax drag.
+
+The final report uses two renter portfolios: **TSX-only** and **S&P 500-only**.
+
+### 18.1 Equal starting capital
+
+The owner and renter begin with identical initial capital:
+
+```text
+Initial Renter Investment = Owner Down Payment + Owner Purchase Cost
+```
+
+The renter invests exactly the capital the owner committed to the property. Under the final-report assumption of a 20% down payment and a 2% purchase cost, the renter's initial portfolio therefore equals **22% of the purchase price**. This 22% figure applies specifically to the final-report scenario; the broader PostgreSQL simulation still retains 10%, 20%, and 30% down-payment scenarios.
+
+---
+
+## 19. Rent, Mobility, and Cash Flow
+
+### 19.1 Rent matching
+
+Market rent is matched to each scenario by **city and calendar year**. Source rent data is annual, so all twelve months of a year carry the same market-rent observation.
+
+The model distinguishes **market rent** — what a new tenant would pay — from **actual renter rent**, what this particular tenant pays given local policy and their own tenure:
+
+| Condition | Actual rent |
+|---|---|
+| Month 0 | Market rent |
+| Market-rate city | Market rent |
+| Renter moves this month | Resets to market rent |
+| Otherwise (controlled) | Previous rent × (1 + control rate ÷ 12) |
+
+Controlled rent is capped so it can never exceed market rent. City settings:
+
+| City | Growth mode | Control rate | Annual move probability | Move cost multiplier |
+|---|---|---:|---:|---:|
+| Canada | mixed | 2.0% | 10% | 1.2 |
+| Toronto | controlled | 2.5% | 8% | 1.8 |
+| Vancouver | controlled | 3.0% | 7% | 2.0 |
+| Calgary | market | — | 15% | 1.2 |
+| Edmonton | market | — | 15% | 1.1 |
+| Ottawa | controlled | 2.5% | 9% | 1.4 |
+| Montreal | controlled | 2.5% | 10% | 1.2 |
+
+In the current implementation, any non-`market` mode follows the controlled-rent branch. The `mixed` label is therefore currently behaviorally equivalent to `controlled` and is retained for possible future extension.
+
+This structure captures the central economic feature of rent control: a long-tenured tenant accumulates a growing discount to market, and loses all of it on moving. Cities with high mobility and no control (Calgary, Edmonton) never build that discount.
+
+### 19.2 Renter mobility
+
+Moves are probabilistic but reproducible. The random seed is `42 + owner_scenario_id`, so rerunning the model reproduces the same move sequence exactly, and the same owner scenario generates identical moves across both portfolio variants — meaning any difference between the TSX and S&P 500 results is attributable to returns alone, never to divergent housing histories.
+
+Monthly move probability is the annual probability ÷ 12. Month 0 is always forced to no move, since it represents the initial state.
+
+```text
+Move Cost = Actual Monthly Rent × Move Cost Multiplier
+```
+
+### 19.3 Monthly cash flow
+
+```text
+Renter Total Cash Outflow = Actual Rent + Move Cost
+
+Owner Total Cash Outflow  = Mortgage Payment + Maintenance
+                          + Property Tax + Insurance
+
+Monthly Savings Difference = Owner Outflow − Renter Outflow
+```
+
+Note that owner cash outflow uses the **full mortgage payment**, including principal. Cash flow measures what leaves the household bank account; the equity treatment of principal belongs to the net-worth calculation (§17), not here.
+
+---
+
+## 20. Renter Investment and Portfolio
+
+### 20.1 Monthly contribution
+
+The final model assumes full investment discipline (100%):
+
+| Savings difference | Action |
+|---|---|
+| Positive | Entire amount invested |
+| Negative | Full shortfall withdrawn from portfolio |
+
+Month 0 contribution is zero, because the renter's initial capital was already allocated at month 0. Adding a monthly contribution there would double-count it.
+
+The symmetric treatment matters: when renting costs more than owning, the renter must draw down the portfolio rather than costlessly absorbing the difference. Without this, the renter would be given free consumption the owner does not receive.
+
+### 20.2 Returns and costs
+
+Monthly S&P 500 and TSX returns are calculated from **nominal CAD** market values, consistent with the simulation running on nominal cash flows (§21).
+
+| Portfolio | Annual fee | Annual tax drag |
+|---|---:|---:|
+| TSX-only | 0.10% | 0.10% |
+| S&P 500-only | 0.10% | 0.25% |
+
+The higher drag on the U.S. portfolio reflects withholding tax on foreign dividends from a Canadian investor's perspective.
+
+```text
+Monthly Investment Cost = (Fee + Tax Drag) ÷ 12
+Portfolio Return Net    = Portfolio Return − Monthly Investment Cost
+```
+
+### 20.3 Portfolio value
+
+Month 0 opens at the initial renter investment. From month 1:
+
+```text
+New Portfolio Value = Previous Value × (1 + Net Return) + Monthly Investment
+```
+
+The portfolio floor is zero — it cannot go negative through withdrawals. Renter nominal net worth equals portfolio value.
+
+---
+
+## 21. Inflation-Adjusted Net Worth
+
+The simulation runs entirely on **nominal** cash flows, keeping house prices, rent, mortgage payments, maintenance, taxes, insurance, contributions, and returns on one consistent basis. Mixing real and nominal quantities inside a compounding loop is a common source of subtle error, so deflation is applied only at the end.
+
+After nominal net worth is complete, both sides are converted to real terms using each scenario's own starting-month CPI:
+
+```text
+Real Net Worth = Nominal Net Worth × Starting-Month CPI ÷ Current CPI
+```
+
+This produces `owner_net_worth_real` and `renter_net_worth_real` — **the primary wealth measures in the final report.**
+
+### 21.1 Index fields
+
+The database also stores `owner_net_worth_index` and `renter_net_worth_index`, normalizing real net worth to month 0 = 100.
+
+These are retained as analytical fields but are **not** used in the final report, which is stated in inflation-adjusted dollar wealth rather than indexed growth. Dollar values also avoid a structural problem with the owner index: at month 0 the owner's net worth is down payment minus estimated sale cost, a small and occasionally negative base that makes an index built on it unstable.
+
+---
+
+## 22. Final Sensitivity Framework
+
+The database supports a wider scenario space than the report uses. The final analysis varies:
+
+```text
+City  ×  Purchase Year  ×  Holding Period  ×  Mortgage Rate  ×  Renter Portfolio
+```
+
+with **down payment fixed at 20%** and **renter discipline fixed at 100%**.
+
+The reason for fixing down payment is interpretive rather than technical. Different down payments require different starting capital, so comparing across them conflates two effects: the performance of the strategy, and the size of the initial capital base. Holding it constant means every difference in final wealth is attributable to the strategy and the market environment.
+
+The 10% and 30% scenarios remain in PostgreSQL as evidence that the simulation engine generalizes, and as a ready extension path. They are excluded from reporting.
+
+**Implementation note:** the 20% filter should be applied in the PostgreSQL view layer feeding Power BI, not left to a report slicer. If all three down-payment levels reach the model, any unfiltered aggregate silently averages across three different capital bases and produces figures with no economic interpretation.
+
+---
+
+## 23. Scenario Processing and Performance
+
+The renter simulation is substantially larger than the owner simulation, since each owner scenario is multiplied by portfolio count.
+
+Python processes renter scenarios in batches of **500 owner scenarios**:
+
+```text
+Read batch from PostgreSQL
+      ↓
+Merge stock returns and CPI
+      ↓
+Calculate renter scenarios
+      ↓
+Write temporary result table
+      ↓
+Update permanent table
+      ↓
+Drop temporary table and release memory
+```
+
+This keeps peak memory bounded regardless of total scenario count, allowing millions of monthly records to be processed without loading the full dataset at once.
+
+### 23.1 Temporary result tables
+
+Both engines write results to a temporary table first — `simulation._owner_monthly_results` and `simulation._renter_monthly_results` — then update the permanent table by join and drop the temporary table.
+
+A bulk `to_sql` insert followed by a single set-based `UPDATE ... FROM` is far faster than row-by-row updates, and the update runs inside a transaction, so a failed batch leaves the permanent table unchanged rather than partially written.
+
+---
+
+## 24. Validation of Simulation Results
+
+### Scenario structure
+- every scenario begins at month 0
+- monthly record count matches the holding period
+- final month matches the intended sale date
+- scenario identifiers remain consistent across owner and renter tables
+
+### Mortgage
+- no negative mortgage balances
+- payment resets occur at renewal months
+- principal never exceeds remaining balance
+- month 0 payment is zero
+- balance reaches zero at full amortization
+
+### Renter
+- no missing market-rent observations
+- month 0 contains no move
+- month 0 monthly investment is zero
+- portfolio values never fall below zero
+- rent resets to market on a move
+- controlled rent never exceeds market rent
+
+### Data alignment
+- housing prices align with simulation dates
+- stock returns align with monthly dates
+- CPI is available for every simulation month
+- mortgage rates are available for purchase and every renewal
+
+### Financial reasonableness
+- no implausible jumps in wealth
+- rent changes are consistent with policy mode and move events
+- mortgage-rate scenarios visibly affect mortgage interest
+- the two portfolio scenarios produce different results
+- final owner and renter outcomes reconcile with their underlying cash-flow paths
+
+---
+
+## 25. Limitations
+
+**Coverage windows differ.** Source datasets do not all begin in the same year, so different parts of the analysis rest on different historical windows. City-level results start in 2005; national and equity comparisons reach back to 1990.
+
+**Historical window constrains scenario coverage.** Scenarios are generated only where a sale-date price observation exists, so recent purchase years support progressively shorter holding periods. Coverage is therefore uneven across the purchase-year dimension, and city × holding-period cells should not be assumed to contain equal scenario counts.
+
+**Frequency alignment.** Annual rent and quarterly housing observations are aligned to the monthly timeline. This makes joins possible but adds no underlying market information — within-year rent variation is not observed, and rent changes appear as annual steps.
+
+**Benchmark prices are market averages.** Benchmark housing prices describe typical properties in a market, not any individual property, and understate the dispersion an actual buyer faces.
+
+**Behavioral assumptions are stylized.** Moving probability, rent-control rates, move costs, maintenance rates, and structure ratios are fixed assumptions applied uniformly within each city. They describe a representative scenario, not any specific household.
+
+**Rate scenarios are stress tests.** The ±2 percentage-point mortgage-rate scenarios are analytical sensitivities, not interest-rate forecasts.
+
+**Full investment discipline is optimistic.** The renter is assumed to invest 100% of monthly savings without fail. Real households save less consistently, so renter outcomes should be read as an upper bound on the renting-and-investing strategy.
+
+**Uniform framework across cities.** Tax treatment, insurance premiums, maintenance requirements, transaction costs, borrowing constraints, and investor behavior vary more across real Canadian markets than the model represents.
+
+---
+
+## 26. Summary
+
+The pipeline is built as a layered PostgreSQL architecture rather than a collection of manually cleaned CSV files:
+
+```text
+Raw ingestion → staging transformation → validation
+→ analytical transformation → scenario generation
+→ Python simulation → Power BI reporting
+```
+
+The **market-level analysis** uses inflation-adjusted housing and equity series to compare long-term real asset performance.
+
+The **household simulation** uses actual market prices and monthly cash flows to model mortgage amortization and interest, maintenance, property tax, insurance, rent, renter mobility, investment contributions, portfolio returns, and both nominal and inflation-adjusted net worth.
+
+The final report fixes down payment at 20% and renter discipline at 100%, evaluating sensitivity across **city, purchase year, holding period, mortgage rate, and renter portfolio**. The primary outcome metrics are `owner_net_worth_real` and `renter_net_worth_real`.
+
+This separation preserves full scenario flexibility in the database while presenting a narrower, more interpretable set of comparisons in the report.
