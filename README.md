@@ -10,13 +10,24 @@ Most rent-versus-buy comparisons set rent against a mortgage payment. That frami
 
 ---
 
-## Screenshots
+## Power BI Report Preview
 
-<!-- Add report page screenshots here -->
+The Power BI dashboard supports interactive scenario exploration across **city, purchase year, holding period, mortgage-rate scenario, and renter portfolio**. Selected report pages are shown below.
+
 | | |
 |---|---|
-| *Long-run housing vs equity markets* | *Regional performance* |
-| *Owner vs renter net worth paths* | *Sensitivity summary* |
+| ![Power BI dashboard preview 1](image.png) | ![Power BI dashboard preview 2](image-1.png) |
+| ![Power BI dashboard preview 3](image-2.png) | ![Power BI dashboard preview 4](image-3.png) |
+| ![Power BI dashboard preview 5](image-4.png) | ![Power BI dashboard preview 6](image-5.png) |
+| ![Power BI dashboard preview 7](image-6.png) | ![Power BI dashboard preview 8](image-7.png) |
+| ![Power BI dashboard preview 9](image-8.png) | ![Power BI dashboard preview 10](image-9.png) |
+
+### Report and Demo
+
+- **[View the Power BI report PDF](power%20bi/power%20bi%20report.pdf)** — static export of the final report.
+- **[Watch the video demo](power%20bi/Video%20Demo.mp4)** — walkthrough of slicers, filtering, and dynamic scenario interactions.
+
+> **Power BI source file:** The final `.pbix` file is approximately **765 MB** and is therefore not stored in this repository because it exceeds GitHub's standard **100 MB per-file limit**. The PDF report and video demo are provided so the report design, results, and interactive workflow can still be reviewed directly from the repository.
 
 ---
 
@@ -137,8 +148,9 @@ docs/
   simulation_methodology.md
   key_findings.md
 
-powerbi/
-  rent_vs_buy.pbix
+power bi/
+  power bi report.pdf                     static export of the final Power BI report
+  Video Demo.mp4                          walkthrough of interactive report behaviour
 ```
 
 ---
@@ -190,9 +202,9 @@ python  python/06_calculate_renter_schedule.py
 
 The owner engine writes to a temporary table and updates the permanent schedule in a single transaction. The renter engine processes 500 owner scenarios per batch to bound memory.
 
-**5 — Open the report**
+**5 — Review the Power BI report**
 
-Point `powerbi/rent_vs_buy.pbix` at your local instance and refresh.
+The repository includes a [PDF export](power%20bi/power%20bi%20report.pdf) and a [video demo](power%20bi/Video%20Demo.mp4) of the final Power BI report. The `.pbix` source file is not included because its approximately 765 MB size exceeds GitHub's standard per-file limit.
 
 > **Note on re-runs:** `renter_monthly_schedule` holds a foreign key to `owner_monthly_schedule`, so re-running step 4 requires dropping the renter table first, or changing the owner drop to `DROP TABLE ... CASCADE`.
 
