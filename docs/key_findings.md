@@ -9,8 +9,8 @@
 
 This report evaluates whether a household would have accumulated more real wealth by **buying a home** or by **renting and investing the capital and monthly cash-flow difference**.
 
-| Layer | Question | Basis |
-| --- | --- | --- |
+| Layer                          | Question                                                                                 | Basis                                                                                                 |
+| ------------------------------ | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | **Household-level simulation** | Would a household have finished with more wealth by buying, or by renting and investing? | Historical home prices, rents, mortgage rates, owner costs, portfolio returns, and monthly cash flows |
 
 The model compares the complete balance sheets of two households that begin with the same initial capital.
@@ -51,12 +51,12 @@ Outcome Range
 
 `Highest Gap → Lowest Gap` identifies the tested values that generate the maximum and minimum Owner−Renter gap. It does **not** mean that the first city, year, portfolio, or mortgage scenario is universally “best.”
 
-| Driver | What varies | What is held fixed |
-| --- | --- | --- |
-| **Purchase timing** | Eligible purchase years | Reference market, holding period, portfolio, mortgage scenario |
-| **City / market** | Tested markets | Reference purchase year, holding period, portfolio, mortgage scenario |
-| **Portfolio choice** | TSX vs. S&P 500 | Reference market, purchase year, holding period, mortgage scenario |
-| **Mortgage rate** | Base vs. Base +2pp | Reference market, purchase year, holding period, portfolio |
+| Driver               | What varies             | What is held fixed                                                    |
+| -------------------- | ----------------------- | --------------------------------------------------------------------- |
+| **Purchase timing**  | Eligible purchase years | Reference market, holding period, portfolio, mortgage scenario        |
+| **City / market**    | Tested markets          | Reference purchase year, holding period, portfolio, mortgage scenario |
+| **Portfolio choice** | TSX vs. S&P 500         | Reference market, purchase year, holding period, mortgage scenario    |
+| **Mortgage rate**    | Base vs. Base +2pp      | Reference market, purchase year, holding period, portfolio            |
 
 Purchase-timing comparisons include only cohorts with a complete holding period inside the historical data window. Because the city-level series begin in 2005 and end in 2025, the number of eligible purchase cohorts falls as the holding horizon increases.
 
@@ -89,10 +89,10 @@ Mortgage Payment
 
 The mortgage payment is separated into two economically different components:
 
-| Component | Treatment |
-| --- | --- |
+| Component     | Treatment                                                          |
+| ------------- | ------------------------------------------------------------------ |
 | **Principal** | Not treated as an unrecoverable cost because it builds home equity |
-| **Interest** | Treated as an unrecoverable financing cost |
+| **Interest**  | Treated as an unrecoverable financing cost                         |
 
 Principal still appears in **cash outflow**, because the household must fund it each month.
 
@@ -150,15 +150,15 @@ This avoids two common distortions: treating mortgage principal as if it were co
 
 Canada-wide benchmark, purchased in **2005**, held for **20 years**, 20% down payment, Base mortgage rates, and **TSX portfolio**:
 
-| Measure | Owner | Renter-Investor |
-| --- | ---: | ---: |
-| Average monthly cash outflow | **$1,520** | **$903** |
-| Cash-outflow CAGR | **1.66%** | **3.21%** |
-| Final real net worth | **$372.7K** | **$441.7K** |
+| Measure                      | Owner       | Renter-Investor |
+| ---------------------------- | -----------:| ---------------:|
+| Average monthly cash outflow | **$1,520**  | **$903**        |
+| Cash-outflow CAGR            | **1.66%**   | **3.21%**       |
+| Final real net worth         | **$372.7K** | **$441.7K**     |
 
-| Ratio measure | Value |
-| --- | ---: |
-| Peak Owner / Renter real net-worth ratio (2022) | **1.81** |
+| Ratio measure                                    | Value    |
+| ------------------------------------------------ | --------:|
+| Peak Owner / Renter real net-worth ratio (2022)  | **1.81** |
 | Final Owner / Renter real net-worth ratio (2025) | **0.84** |
 
 The renter-investor finished ahead by roughly **$69K**, even though the owner held the wealth advantage through much of the middle of the period.
@@ -173,6 +173,27 @@ Although renter cash outflow grew faster than owner cash outflow, it started fro
 
 ---
 
+| Market    | Housing Real CAGR | Rent Real CAGR | Owner / Renter Cash Outflow Ratio | Owner Outflow CAGR | Renter Outflow CAGR | Final Net Worth Ratio |
+| --------- | ----------------- | -------------- | --------------------------------- | ------------------ | ------------------- | --------------------- |
+| Vancouver | 4.14%             | 1.97%          | 0.83                              | 1.44%              | 3.62%               | 2.72                  |
+| Montreal  | 3.34%             | 1.60%          | 1.42                              | 1.60%              | 2.92%               | 1.19                  |
+| Toronto   | 3.17%             | 1.24%          | 1.53                              | 1.53%              | 4.05%               | 1.01                  |
+| Ottawa    | 2.59%             | 1.42%          | 1.31                              | 1.56%              | 2.92%               | 1.03                  |
+| Calgary   | 2.48%             | 2.32%          | 1.10                              | 1.52%              | 4.52%               | 1.05                  |
+| Edmonton  | 2.14%             | 1.77%          | 1.02                              | 1.40%              | 4.42%               | 1.18                  |
+
+After adjusting for inflation, real rent increased more slowly than real housing prices in every market. However, the size of this difference varied substantially by city.
+
+* **Vancouver had the largest growth gap:** housing grew by **4.14% annually**, compared with **1.97% real rent growth**. Together with an average owner cash outflow below the renter’s, this produced the strongest owner result—a final net-worth ratio of **2.72**.
+* **Montreal also had a meaningful growth gap:** **3.34% housing growth versus 1.60% rent growth**. The owner finished 19% ahead despite having substantially higher average monthly cash outflow.
+* **Toronto had strong housing growth relative to rent:** **3.17% versus 1.24%**. Nevertheless, the final ratio was only **1.01** because the owner carried the highest relative monthly cash burden. Housing appreciation alone was therefore insufficient to create a decisive owner advantage.
+* **Ottawa finished close to parity:** housing grew by **2.59%**, compared with **1.42% real rent growth**, but the owner’s average monthly outflow was still 31% higher.
+* **Calgary had the smallest difference between housing and rent growth:** **2.48% versus 2.32%**. Its final ratio of **1.05** is consistent with a nearly balanced outcome.
+* **Edmonton also had a relatively narrow growth difference:** **2.14% housing growth versus 1.77% rent growth**. However, owner and renter monthly outflows were almost equal, limiting the renter’s ability to invest monthly savings and helping the owner finish 18% ahead.
+* **Canada shows why growth rates alone do not determine the winner.** National housing grew faster than rent—**2.87% versus 1.63%**—but the renter still finished ahead. The renter benefited from much lower monthly cash outflow and a TSX real return of **3.84%**, which exceeded national housing growth.
+
+> **Main finding:** Faster housing appreciation generally strengthened owner outcomes, but the final result depended on the combination of housing growth, rent growth, financing costs, cash-flow differences, leverage, and investment returns—not the housing-versus-rent growth gap alone.
+
 ## 4. Sensitivity Analysis
 
 **Reference scenario:** Purchase Year = 2005, Portfolio = TSX, Mortgage = Base. Across the four views, the holding period changes from 5 to 20 years.
@@ -181,25 +202,25 @@ Within each sensitivity measure, the selected driver is varied while the remaini
 
 ### 4.1 Canada Aggregate
 
-| Holding | Metric | Purchase timing | City | Portfolio | Mortgage |
-| --- | --- | ---: | ---: | ---: | ---: |
-| **5Y** | Net worth | **$244K** | $74K | $24K | $20K |
-|  | Cash outflow | **$89K** | $60K | **$0** | $17K |
-| **10Y** | Net worth | **$281K** | $106K | $114K | $37K |
-|  | Cash outflow | $88K | **$120K** | **$0** | $40K |
-| **15Y** | Net worth | $208K | $213K | **$259K** | $54K |
-|  | Cash outflow | $84K | **$183K** | **$0** | $43K |
-| **20Y** | Net worth | — | $245K | **$455K** | $66K |
-|  | Cash outflow | — | **$243K** | **$0** | $47K |
+| Holding | Metric       | Purchase timing | City      | Portfolio | Mortgage |
+| ------- | ------------ | ---------------:| ---------:| ---------:| --------:|
+| **5Y**  | Net worth    | **$244K**       | $74K      | $24K      | $20K     |
+|         | Cash outflow | **$89K**        | $60K      | **$0**    | $17K     |
+| **10Y** | Net worth    | **$281K**       | $106K     | $114K     | $37K     |
+|         | Cash outflow | $88K            | **$120K** | **$0**    | $40K     |
+| **15Y** | Net worth    | $208K           | $213K     | **$259K** | $54K     |
+|         | Cash outflow | $84K            | **$183K** | **$0**    | $43K     |
+| **20Y** | Net worth    | —               | $245K     | **$455K** | $66K     |
+|         | Cash outflow | —               | **$243K** | **$0**    | $47K     |
 
 **1. Portfolio and mortgage-rate sensitivity are similar at five years, then diverge sharply.**
 
 | Holding | Portfolio | Mortgage | Ratio |
-| --- | ---: | ---: | ---: |
-| 5Y | $24K | $20K | 1.2× |
-| 10Y | $114K | $37K | 3.1× |
-| 15Y | $259K | $54K | 4.8× |
-| 20Y | $455K | $66K | 6.9× |
+| ------- | ---------:| --------:| -----:|
+| 5Y      | $24K      | $20K     | 1.2×  |
+| 10Y     | $114K     | $37K     | 3.1×  |
+| 15Y     | $259K     | $54K     | 4.8×  |
+| 20Y     | $455K     | $66K     | 6.9×  |
 
 Over five years, the tested portfolio choice produces a net-worth range similar to the mortgage-rate scenarios. Over twenty years, portfolio sensitivity is almost seven times larger.
 
@@ -233,16 +254,16 @@ Entry timing therefore appears to operate more strongly through asset values and
 
 ### 4.2 Toronto Market
 
-| Holding | Outcome | Purchase timing | Portfolio | Mortgage |
-| --- | --- | ---: | ---: | ---: |
-| **5Y** | Net worth | **$460K** | $30K | $27K |
-|  | Cash outflow | **$151K** | $0 | $27K |
-| **10Y** | Net worth | **$490K** | $138K | $45K |
-|  | Cash outflow | **$134K** | $0 | $45K |
-| **15Y** | Net worth | **$363K** | $312K | $65K |
-|  | Cash outflow | $56K | $0 | $44K |
-| **20Y** | Net worth | — | **$539K** | $93K |
-|  | Cash outflow | — | $0 | $85K |
+| Holding | Outcome      | Purchase timing | Portfolio | Mortgage |
+| ------- | ------------ | ---------------:| ---------:| --------:|
+| **5Y**  | Net worth    | **$460K**       | $30K      | $27K     |
+|         | Cash outflow | **$151K**       | $0        | $27K     |
+| **10Y** | Net worth    | **$490K**       | $138K     | $45K     |
+|         | Cash outflow | **$134K**       | $0        | $45K     |
+| **15Y** | Net worth    | **$363K**       | $312K     | $65K     |
+|         | Cash outflow | $56K            | $0        | $44K     |
+| **20Y** | Net worth    | —               | **$539K** | $93K     |
+|         | Cash outflow | —               | $0        | $85K     |
 
 **1. Toronto has the highest measured purchase-timing sensitivity in the comparison.**
 
@@ -253,10 +274,10 @@ This makes Toronto particularly dependent on the market cycle in which the house
 **2. Toronto's timing effect becomes increasingly concentrated in wealth rather than cash flow.**
 
 | Holding | Net-worth sensitivity | Cash-outflow sensitivity |
-| --- | ---: | ---: |
-| 5Y | $460K | $151K |
-| 10Y | $490K | $134K |
-| 15Y | $363K | $56K |
+| ------- | ---------------------:| ------------------------:|
+| 5Y      | $460K                 | $151K                    |
+| 10Y     | $490K                 | $134K                    |
+| 15Y     | $363K                 | $56K                     |
 
 At fifteen years, net-worth timing sensitivity is more than six times the cash-outflow sensitivity.
 
@@ -309,16 +330,16 @@ Toronto's cash-flow sensitivity also rises sharply from **$44K at fifteen years 
 
 ### 4.3 Vancouver Market
 
-| Holding | Outcome | Purchase timing | Portfolio | Mortgage |
-| --- | --- | ---: | ---: | ---: |
-| **5Y** | Net worth | **$316K** | $18K | $21K |
-|  | Cash outflow | **$56K** | $0 | $24K |
-| **10Y** | Net worth | **$255K** | $54K | $34K |
-|  | Cash outflow | **$106K** | $0 | $40K |
-| **15Y** | Net worth | $89K | **$119K** | $55K |
-|  | Cash outflow | **$71K** | $0 | $30K |
-| **20Y** | Net worth | — | **$218K** | $75K |
-|  | Cash outflow | — | $0 | $37K |
+| Holding | Outcome      | Purchase timing | Portfolio | Mortgage |
+| ------- | ------------ | ---------------:| ---------:| --------:|
+| **5Y**  | Net worth    | **$316K**       | $18K      | $21K     |
+|         | Cash outflow | **$56K**        | $0        | $24K     |
+| **10Y** | Net worth    | **$255K**       | $54K      | $34K     |
+|         | Cash outflow | **$106K**       | $0        | $40K     |
+| **15Y** | Net worth    | $89K            | **$119K** | $55K     |
+|         | Cash outflow | **$71K**        | $0        | $30K     |
+| **20Y** | Net worth    | —               | **$218K** | $75K     |
+|         | Cash outflow | —               | $0        | $37K     |
 
 **1. Vancouver's measured purchase-timing sensitivity falls sharply with longer horizons.**
 
@@ -333,10 +354,10 @@ The decline should not be interpreted as proof that longer holding periods elimi
 **2. Vancouver's wealth and cash-flow timing sensitivities converge by fifteen years.**
 
 | Holding | Net Worth | Cash Outflow |
-| --- | ---: | ---: |
-| 5Y | $316K | $56K |
-| 10Y | $255K | $106K |
-| 15Y | $89K | $71K |
+| ------- | ---------:| ------------:|
+| 5Y      | $316K     | $56K         |
+| 10Y     | $255K     | $106K        |
+| 15Y     | $89K      | $71K         |
 
 At fifteen years, the two ranges are relatively close.
 
@@ -345,10 +366,10 @@ This is almost the opposite of Toronto, where fifteen-year timing sensitivity re
 **3. Vancouver's timing extremes change with the holding horizon.**
 
 | Holding | Highest Gap → Lowest Gap |
-| --- | --- |
-| 5Y | **2019 → 2013** |
-| 10Y | **2008 → 2014** |
-| 15Y | **2007 → 2010** |
+| ------- | ------------------------ |
+| 5Y      | **2019 → 2013**          |
+| 10Y     | **2008 → 2014**          |
+| 15Y     | **2007 → 2010**          |
 
 There is no single consistently favourable or unfavourable purchase cohort. Vancouver's timing result is therefore strongly path-dependent.
 
@@ -384,16 +405,16 @@ The wealth effect rises steadily, while the cash-flow effect does not.
 
 ### 4.4 Montreal Market
 
-| Holding | Outcome | Purchase timing | Portfolio | Mortgage |
-| --- | --- | ---: | ---: | ---: |
-| **5Y** | Net worth | **$125K** | $17K | $14K |
-|  | Cash outflow | **$66K** | $0 | $17K |
-| **10Y** | Net worth | **$88K** | $78K | $25K |
-|  | Cash outflow | **$40K** | $0 | $21K |
-| **15Y** | Net worth | $75K | **$172K** | $41K |
-|  | Cash outflow | **$39K** | $0 | $31K |
-| **20Y** | Net worth | — | **$297K** | $69K |
-|  | Cash outflow | — | $0 | **$64K** |
+| Holding | Outcome      | Purchase timing | Portfolio | Mortgage |
+| ------- | ------------ | ---------------:| ---------:| --------:|
+| **5Y**  | Net worth    | **$125K**       | $17K      | $14K     |
+|         | Cash outflow | **$66K**        | $0        | $17K     |
+| **10Y** | Net worth    | **$88K**        | $78K      | $25K     |
+|         | Cash outflow | **$40K**        | $0        | $21K     |
+| **15Y** | Net worth    | $75K            | **$172K** | $41K     |
+|         | Cash outflow | **$39K**        | $0        | $31K     |
+| **20Y** | Net worth    | —               | **$297K** | $69K     |
+|         | Cash outflow | —               | $0        | **$64K** |
 
 **1. Montreal has the lowest measured purchase-timing sensitivity.**
 
@@ -449,16 +470,16 @@ The similar magnitudes do not prove that the entire wealth effect comes from cas
 
 ### 4.5 Ottawa Market
 
-| Holding | Outcome | Purchase timing | Portfolio | Mortgage |
-| --- | --- | ---: | ---: | ---: |
-| **5Y** | Net worth | **$292K** | $21K | $19K |
-|  | Cash outflow | **$80K** | $0 | $24K |
-| **10Y** | Net worth | **$105K** | $93K | $32K |
-|  | Cash outflow | **$52K** | $0 | $27K |
-| **15Y** | Net worth | $183K | **$207K** | $49K |
-|  | Cash outflow | **$64K** | $0 | $35K |
-| **20Y** | Net worth | — | **$357K** | $81K |
-|  | Cash outflow | — | $0 | **$50K** |
+| Holding | Outcome      | Purchase timing | Portfolio | Mortgage |
+| ------- | ------------ | ---------------:| ---------:| --------:|
+| **5Y**  | Net worth    | **$292K**       | $21K      | $19K     |
+|         | Cash outflow | **$80K**        | $0        | $24K     |
+| **10Y** | Net worth    | **$105K**       | $93K      | $32K     |
+|         | Cash outflow | **$52K**        | $0        | $27K     |
+| **15Y** | Net worth    | $183K           | **$207K** | $49K     |
+|         | Cash outflow | **$64K**        | $0        | $35K     |
+| **20Y** | Net worth    | —               | **$357K** | $81K     |
+|         | Cash outflow | —               | $0        | **$50K** |
 
 **1. Ottawa's purchase-timing sensitivity is non-linear.**
 
@@ -479,10 +500,10 @@ This means Ottawa does not support a simple “longer holding reduces timing sen
 **2. The 2005 cohort consistently produces Ottawa's lowest Owner−Renter gap.**
 
 | Holding | Highest Gap → Lowest Gap |
-| --- | --- |
-| 5Y | **2020 → 2005** |
-| 10Y | **2013 → 2005** |
-| 15Y | **2008 → 2005** |
+| ------- | ------------------------ |
+| 5Y      | **2020 → 2005**          |
+| 10Y     | **2013 → 2005**          |
+| 15Y     | **2008 → 2005**          |
 
 The highest-gap cohort changes, but the lowest-gap cohort remains 2005.
 
@@ -535,16 +556,16 @@ $24K → $27K → $35K → $50K
 
 ### 4.6 Edmonton Market
 
-| Holding | Outcome | Purchase timing | Portfolio | Mortgage |
-| --- | --- | ---: | ---: | ---: |
-| **5Y** | Net worth | **$135K** | $16K | $16K |
-|  | Cash outflow | **$71K** | $0 | $11K |
-| **10Y** | Net worth | **$221K** | $65K | $26K |
-|  | Cash outflow | **$99K** | $0 | $26K |
-| **15Y** | Net worth | **$187K** | $144K | $39K |
-|  | Cash outflow | **$128K** | $0 | $39K |
-| **20Y** | Net worth | — | **$236K** | $59K |
-|  | Cash outflow | — | $0 | **$28K** |
+| Holding | Outcome      | Purchase timing | Portfolio | Mortgage |
+| ------- | ------------ | ---------------:| ---------:| --------:|
+| **5Y**  | Net worth    | **$135K**       | $16K      | $16K     |
+|         | Cash outflow | **$71K**        | $0        | $11K     |
+| **10Y** | Net worth    | **$221K**       | $65K      | $26K     |
+|         | Cash outflow | **$99K**        | $0        | $26K     |
+| **15Y** | Net worth    | **$187K**       | $144K     | $39K     |
+|         | Cash outflow | **$128K**       | $0        | $39K     |
+| **20Y** | Net worth    | —               | **$236K** | $59K     |
+|         | Cash outflow | —               | $0        | **$28K** |
 
 **1. Edmonton is one of the few markets where purchase-timing cash-flow sensitivity rises with horizon.**
 
@@ -563,10 +584,10 @@ Timing differences therefore remain visible in both wealth and cumulative spendi
 **2. The same timing extremes persist across every measurable horizon.**
 
 | Holding | Highest Gap → Lowest Gap |
-| --- | --- |
-| 5Y | **2007 → 2005** |
-| 10Y | **2007 → 2005** |
-| 15Y | **2007 → 2005** |
+| ------- | ------------------------ |
+| 5Y      | **2007 → 2005**          |
+| 10Y     | **2007 → 2005**          |
+| 15Y     | **2007 → 2005**          |
 
 That persistence is unusual compared with Vancouver or Ottawa.
 
@@ -619,16 +640,16 @@ Portfolio is catching up, but timing remains larger wherever both are measurable
 
 ### 4.7 Calgary Market
 
-| Holding | Outcome | Purchase timing | Portfolio | Mortgage |
-| --- | --- | ---: | ---: | ---: |
-| **5Y** | Net worth | **$150K** | $22K | $19K |
-|  | Cash outflow | **$67K** | $0 | $19K |
-| **10Y** | Net worth | **$216K** | $92K | $35K |
-|  | Cash outflow | **$103K** | $0 | $36K |
-| **15Y** | Net worth | $171K | **$204K** | $55K |
-|  | Cash outflow | **$132K** | $0 | $49K |
-| **20Y** | Net worth | — | **$352K** | $82K |
-|  | Cash outflow | — | $0 | **$56K** |
+| Holding | Outcome      | Purchase timing | Portfolio | Mortgage |
+| ------- | ------------ | ---------------:| ---------:| --------:|
+| **5Y**  | Net worth    | **$150K**       | $22K      | $19K     |
+|         | Cash outflow | **$67K**        | $0        | $19K     |
+| **10Y** | Net worth    | **$216K**       | $92K      | $35K     |
+|         | Cash outflow | **$103K**       | $0        | $36K     |
+| **15Y** | Net worth    | $171K           | **$204K** | $55K     |
+|         | Cash outflow | **$132K**       | $0        | $49K     |
+| **20Y** | Net worth    | —               | **$352K** | $82K     |
+|         | Cash outflow | —               | $0        | **$56K** |
 
 **1. Calgary's purchase-timing effect remains persistent in both wealth and spending.**
 
@@ -649,20 +670,20 @@ As in Edmonton, the cash-flow range increases rather than fading.
 **2. The same 2007 → 2005 timing ordering persists at every measurable horizon.**
 
 | Holding | Highest Gap → Lowest Gap |
-| --- | --- |
-| 5Y | **2007 → 2005** |
-| 10Y | **2007 → 2005** |
-| 15Y | **2007 → 2005** |
+| ------- | ------------------------ |
+| 5Y      | **2007 → 2005**          |
+| 10Y     | **2007 → 2005**          |
+| 15Y     | **2007 → 2005**          |
 
 The same ordering also appears in Calgary's cash-outflow sensitivity.
 
 **3. Calgary's wealth and cash-flow timing sensitivities converge as the horizon lengthens.**
 
 | Holding | Net Worth | Cash Outflow |
-| --- | ---: | ---: |
-| 5Y | $150K | $67K |
-| 10Y | $216K | $103K |
-| 15Y | $171K | $132K |
+| ------- | ---------:| ------------:|
+| 5Y      | $150K     | $67K         |
+| 10Y     | $216K     | $103K        |
+| 15Y     | $171K     | $132K        |
 
 By fifteen years, the two ranges are much closer than at five years.
 
@@ -698,10 +719,10 @@ Both Alberta markets show rising purchase-timing cash sensitivity, persistent **
 
 But their long-run sensitivities diverge:
 
-| 20Y | Calgary | Edmonton |
-| --- | ---: | ---: |
-| Portfolio | **$352K** | $236K |
-| Mortgage | **$82K** | $59K |
+| 20Y       | Calgary   | Edmonton |
+| --------- | ---------:| --------:|
+| Portfolio | **$352K** | $236K    |
+| Mortgage  | **$82K**  | $59K     |
 
 > **Interpretation:** Calgary and Edmonton share a persistent purchase-cohort structure, but Calgary becomes much more sensitive to portfolio and financing assumptions over long horizons.
 
@@ -711,11 +732,11 @@ But their long-run sensitivities diverge:
 
 Several modeling choices affect the comparison in different directions rather than systematically favouring either buying or renting.
 
-| Modeling Choice | Likely Directional Effect |
-| --- | --- |
-| **Equity series exclude reinvested dividends** | Understates renter-investor portfolio growth relative to a total-return benchmark, tending to favour the owner |
-| **Mortgage-rate series uses a standardized posted / typical benchmark** | May overstate financing costs for borrowers who obtained discounted contract rates, tending to favour the renter-investor |
-| **Illustrative scenarios often use the TSX portfolio** | Produces a weaker renter-investor outcome than the S&P 500 alternative in the historical scenarios examined, tending to favour the owner |
+| Modeling Choice                                                         | Likely Directional Effect                                                                                                                |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **Equity series exclude reinvested dividends**                          | Understates renter-investor portfolio growth relative to a total-return benchmark, tending to favour the owner                           |
+| **Mortgage-rate series uses a standardized posted / typical benchmark** | May overstate financing costs for borrowers who obtained discounted contract rates, tending to favour the renter-investor                |
+| **Illustrative scenarios often use the TSX portfolio**                  | Produces a weaker renter-investor outcome than the S&P 500 alternative in the historical scenarios examined, tending to favour the owner |
 
 These effects operate in different directions. The model should therefore not be interpreted as uniformly conservative toward either strategy.
 
@@ -727,15 +748,15 @@ These effects operate in different directions. The model should therefore not be
 
 The national aggregate and six city markets exhibit materially different sensitivity profiles.
 
-| Market | Purchase-Timing Pattern | Long-Run Portfolio Sensitivity | Mortgage Sensitivity | Cash-Flow Pattern | Main Takeaway |
-| --- | --- | ---: | --- | --- | --- |
-| **Canada Aggregate** | High at 5–10Y; measured range falls at 15Y | **$455K at 20Y** | $66K NW / $47K cash | Timing cash sensitivity stays near $84K–$89K | Timing dominates short horizons; portfolio dominates long-run wealth; geography dominates long-run cash flow |
-| **Toronto** | **Highest measured timing sensitivity:** $460K → $490K → $363K | **$539K — highest** | **$93K NW / $85K cash** | Timing cash effect falls sharply while wealth sensitivity remains very large | Highest measured sensitivity across several drivers; strongly scenario-dependent |
-| **Vancouver** | $316K → $255K → **$89K** | **$218K — lowest** | $75K NW / $37K cash | Timing wealth and cash sensitivities converge by 15Y | Strong short-run timing effect but comparatively muted long-run portfolio sensitivity |
-| **Montreal** | **Lowest measured timing sensitivity:** $125K → $88K → $75K | $297K | $69K NW / $64K cash | Timing sensitivity is low in both wealth and spending | Least entry-dependent city; portfolio gradually replaces timing as the main wealth driver |
-| **Ottawa** | **Non-linear:** $292K → $105K → $183K | $357K | $81K NW / $50K cash | Timing cash sensitivity falls then rebounds | Mixed regime; timing depends heavily on horizon and portfolio becomes important relatively early |
-| **Edmonton** | $135K → $221K → $187K; persistent | **$236K — second-lowest** | **$59K NW / $28K cash — lowest long-run mortgage sensitivity** | **Timing cash sensitivity rises:** $71K → $99K → $128K | Persistent entry-cohort effect and relatively low sensitivity to portfolio and mortgage assumptions |
-| **Calgary** | $150K → $216K → $171K; persistent | **$352K** | $82K NW / $56K cash | **Timing cash sensitivity rises:** $67K → $103K → $132K | Similar timing structure to Edmonton, but much stronger long-run portfolio and financing sensitivity |
+| Market               | Purchase-Timing Pattern                                        | Long-Run Portfolio Sensitivity | Mortgage Sensitivity                                           | Cash-Flow Pattern                                                            | Main Takeaway                                                                                                |
+| -------------------- | -------------------------------------------------------------- | ------------------------------:| -------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| **Canada Aggregate** | High at 5–10Y; measured range falls at 15Y                     | **$455K at 20Y**               | $66K NW / $47K cash                                            | Timing cash sensitivity stays near $84K–$89K                                 | Timing dominates short horizons; portfolio dominates long-run wealth; geography dominates long-run cash flow |
+| **Toronto**          | **Highest measured timing sensitivity:** $460K → $490K → $363K | **$539K — highest**            | **$93K NW / $85K cash**                                        | Timing cash effect falls sharply while wealth sensitivity remains very large | Highest measured sensitivity across several drivers; strongly scenario-dependent                             |
+| **Vancouver**        | $316K → $255K → **$89K**                                       | **$218K — lowest**             | $75K NW / $37K cash                                            | Timing wealth and cash sensitivities converge by 15Y                         | Strong short-run timing effect but comparatively muted long-run portfolio sensitivity                        |
+| **Montreal**         | **Lowest measured timing sensitivity:** $125K → $88K → $75K    | $297K                          | $69K NW / $64K cash                                            | Timing sensitivity is low in both wealth and spending                        | Least entry-dependent city; portfolio gradually replaces timing as the main wealth driver                    |
+| **Ottawa**           | **Non-linear:** $292K → $105K → $183K                          | $357K                          | $81K NW / $50K cash                                            | Timing cash sensitivity falls then rebounds                                  | Mixed regime; timing depends heavily on horizon and portfolio becomes important relatively early             |
+| **Edmonton**         | $135K → $221K → $187K; persistent                              | **$236K — second-lowest**      | **$59K NW / $28K cash — lowest long-run mortgage sensitivity** | **Timing cash sensitivity rises:** $71K → $99K → $128K                       | Persistent entry-cohort effect and relatively low sensitivity to portfolio and mortgage assumptions          |
+| **Calgary**          | $150K → $216K → $171K; persistent                              | **$352K**                      | $82K NW / $56K cash                                            | **Timing cash sensitivity rises:** $67K → $103K → $132K                      | Similar timing structure to Edmonton, but much stronger long-run portfolio and financing sensitivity         |
 
 ### Overall cross-market interpretation
 
@@ -791,12 +812,12 @@ The rent-versus-buy question is often framed as **rent versus mortgage payment**
 
 The comparison that matters is:
 
-| Owner | Renter-Investor |
-| --- | --- |
-| Housing equity | Initial invested capital |
-| Mortgage path | Monthly cash-flow differences |
-| Ownership costs | Portfolio compounding |
-| Housing appreciation | Fees and tax drag |
+| Owner                | Renter-Investor               |
+| -------------------- | ----------------------------- |
+| Housing equity       | Initial invested capital      |
+| Mortgage path        | Monthly cash-flow differences |
+| Ownership costs      | Portfolio compounding         |
+| Housing appreciation | Fees and tax drag             |
 
 Across the historical scenarios, purchase timing, city, holding period, financing conditions, and the renter's alternative portfolio all materially changed the result.
 
