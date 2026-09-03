@@ -2,7 +2,7 @@
 
 **A historical scenario-analysis framework built on PostgreSQL, Python, and Power BI.**
 
-This project evaluates the financial trade-off between buying a home and renting while investing using two connected historical analyses: a long-run asset comparison from 1990–2025 and a household-level simulation across seven Canadian housing markets from 2005–2025.
+This project evaluates the financial trade-off between buying a home and renting while investing using two connected historical analyses: a long-run asset comparison from 1990–2025 and a household-level simulation across six Canadian cities and a national benchmark from 2005–2025.
 
 Most rent-versus-buy comparisons set rent against a mortgage payment. That framing is wrong in both directions: it treats mortgage principal as a cost when it is savings, and it treats the renter's capital as if it vanishes. This model instead simulates two complete household balance sheets, month by month, starting from identical capital.
 
@@ -14,13 +14,12 @@ Most rent-versus-buy comparisons set rent against a mortgage payment. That frami
 
 The Power BI dashboard supports interactive scenario exploration across **city, purchase year, holding period, mortgage-rate scenario, and renter portfolio**. Selected report pages are shown below.
 
-|                                              |                                               |
-| -------------------------------------------- | --------------------------------------------- |
-| ![Power BI dashboard preview 1](image.png)   | ![Power BI dashboard preview 2](image-1.png)  |
-| ![Power BI dashboard preview 3](image-2.png) | ![Power BI dashboard preview 4](image-3.png)  |
-| ![Power BI dashboard preview 5](image-4.png) | ![Power BI dashboard preview 6](image-5.png)  |
-| ![Power BI dashboard preview 7](image-6.png) | ![Power BI dashboard preview 8](image-7.png)  |
-| ![Power BI dashboard preview 9](image-8.png) | ![Power BI dashboard preview 10](image-9.png) |
+|                                                                        |                                                                     |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| ![Long-run housing vs equity markets](docs/img/01-longrun-markets.png) | ![Regional housing performance](docs/img/02-regional-housing.png)   |
+| ![Owner vs renter net worth paths](docs/img/03-networth-paths.png)     | ![Outcome sensitivity ranking](docs/img/04-sensitivity.png)         |
+
+Additional report pages are included in the PDF export below.
 
 ### Report and Demo
 
@@ -81,13 +80,19 @@ Canada-wide benchmark · purchased 2005 · 20-year hold · 20% down · Base rate
 
 The renter finished about **$69K ahead** — despite the owner leading for most of the middle of the period, and despite the renter holding the weaker of the two portfolios.
 
+> **This is the national benchmark series, not a city.** Across the six individual markets under the same assumptions, the owner finished ahead in every case: Vancouver 2.72, Montreal 1.19, Edmonton 1.18, Calgary 1.05, Ottawa 1.03, Toronto 1.01 (owner ÷ renter final real net worth). The national series pairs national average prices with national average rents, so its cash-flow position does not describe any single market. Market-by-market results are in the key findings.
+
 ### What actually moves the result
 
-**Portfolio choice was the largest tested sensitivity in several long-horizon scenarios.** In one Calgary scenario, switching the renter from TSX to S&P 500 moved the final real net-worth gap by about $352K, compared with about $82K for a Base-to-Higher mortgage-rate change. Portfolio effects grow strongly with holding period because returns compound directly on the portfolio balance, while mortgage-rate effects operate primarily through the homeowner's monthly financing cash flow.
+**Portfolio choice and mortgage rates are equivalent at short horizons, then diverge.** At five years the TSX-versus-S&P 500 net-worth range and the Base-versus-Base+2pp range are nearly equal in every market tested — a ratio between **0.9× and 1.2× across all seven series**. By fifteen years the ratio reaches 2.2× to 4.8×. Because both drivers range over exactly two tested values at every horizon, this is the comparison least affected by the shrinking-cohort issue that limits purchase-timing comparisons. In one Calgary scenario the 20-year figures were about $352K for portfolio against $82K for mortgage rate.
 
 **Mortgage rates primarily transmit through cash flow in the illustrated long-horizon scenario.** In the Calgary 2005 / 20-year / TSX case, moving from Base to Base +2pp reduced owner final real net worth by about $6K while increasing renter final real net worth by about $76K. Higher mortgage payments increased the owner-renter monthly cash-flow difference, creating additional investment contributions for the renter.
 
+**Expensive housing does not mean expensive to hold.** Vancouver was the only market where the owner's average monthly outflow was *lower* than the renter's (0.83×), and it produced the strongest owner result. It has the lowest residential property-tax rate of any major Canadian city, and land makes up an unusually large share of property value there, so the structure subject to maintenance is proportionally smaller. Lighter carrying costs narrow the monthly gap that funds the renter's portfolio — which is also why Vancouver shows the weakest portfolio sensitivity of any market tested.
+
 **Entry timing dominates short horizons.** For five-year holds, outcomes in a single city swung from a large owner advantage to a six-figure owner shortfall depending only on purchase year.
+
+> **Note on 20-year figures:** Housing data extends to March 2026 while the simulation horizon ends December 2025, so a small number of 2006-entry cohorts are truncated before reaching their sale month. Twenty-year figures are provisional pending exclusion of those scenarios at generation.
 
 Full results and interpretation: [`docs/key_findings.md`](docs/key_findings.md)
 
@@ -217,14 +222,15 @@ Full specification: [`docs/simulation_methodology.md`](docs/simulation_methodolo
 
 | Dimension             | Values                                                          |
 | --------------------- | --------------------------------------------------------------- |
-| City                  | Canada, Vancouver, Calgary, Edmonton, Toronto, Ottawa, Montreal |
-| Purchase year         | 2005 / 2010 / 2015 / 2020                                       |
+| City                  | Vancouver, Calgary, Edmonton, Toronto, Ottawa, Montreal, plus a national benchmark |
+| Purchase year         | Every year with a completed scenario at the given holding period |
 | Holding period        | 5 / 10 / 15 / 20 years                                          |
 | Mortgage rate         | Lower (−2pp) · Base · Higher (+2pp)                             |
 | Renter portfolio      | TSX-only · S&P 500-only                                         |
 | **Down payment**      | **Fixed at 20%**                                                |
 | **Renter discipline** | **Fixed at 100%**                                               |
-| **Down payment**      | **Fixed at 20%**                                                |
+
+The number of available purchase years falls as the holding period lengthens, since city-level price data begins in 2005 and the simulation horizon ends in December 2025 — roughly sixteen entry years at the 5-year horizon against one at 20 years. Sensitivity figures that range over purchase year are therefore not directly comparable across holding periods.
 
 Down payment is held constant because different levels require different starting capital, which would conflate the performance of a strategy with the size of its capital base. The 10% and 30% scenarios remain in the database for extension.
 
