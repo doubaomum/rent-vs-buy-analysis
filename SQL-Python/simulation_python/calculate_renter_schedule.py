@@ -258,10 +258,10 @@ def calculate_one_renter_scenario(
     # -----------------------------------------------------
     # Generate deterministic renter moves
     # -----------------------------------------------------
-    random_seed = 42 + owner_scenario_id
+    MOVE_RANDOM_SEED = 42
 
     random_generator = np.random.default_rng(
-        random_seed
+        MOVE_RANDOM_SEED
     )
 
     scenario["random_move"] = (

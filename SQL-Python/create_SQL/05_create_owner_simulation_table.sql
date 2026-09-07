@@ -22,45 +22,6 @@ VALUES
     ('Ottawa',    0.012, 0.50),
     ('Montreal',  0.008, 0.50);
 
-DROP TABLE IF EXISTS analysis.city_house_prices_long;
-
-CREATE TABLE analysis.city_house_prices_long AS
-SELECT
-    t.date_period,
-    x.city,
-    x.price
-FROM stg.city_house_prices AS t
-CROSS JOIN LATERAL (
-    VALUES
-        ('Vancouver', t.vancouver_price),
-        ('Calgary', t.calgary_price),
-        ('Edmonton', t.edmonton_price),
-        ('Toronto', t.toronto_price),
-        ('Ottawa', t.ottawa_price),
-        ('Montreal', t.montreal_price),
-        ('Canada', t.canada_price)
-) AS x(city, price)
-WHERE x.price IS NOT NULL;
-
-
-DROP TABLE IF EXISTS analysis.city_rent_long;
-CREATE TABLE analysis.city_rent_long AS
-SELECT
-    t.date_period,
-    x.city,
-    x.price
-FROM stg.city_rent AS t
-CROSS JOIN LATERAL (
-    VALUES
-        ('Vancouver', t.vancouver_price),
-        ('Calgary', t.calgary_price),
-        ('Edmonton', t.edmonton_price),
-        ('Toronto', t.toronto_price),
-        ('Ottawa', t.ottawa_price),
-        ('Montreal', t.montreal_price),
-        ('Canada', t.canada_price)
-) AS x(city, price)
-WHERE x.price IS NOT NULL;
 
 DROP TABLE IF EXISTS simulation.owner_basic_model CASCADE;
 
@@ -380,21 +341,32 @@ SELECT
     owner.mortgage_term_year,
     owner.amortization_years,
     
+    -- Mortgage term alignment:
+    -- Month 0-60   = term 0
+    -- Month 61-120 = term 1
+    -- Month 121-180 = term 2
+    --
+    -- Subtract 1 before division so the renewal rate starts
+    -- at Month 61 rather than Month 60.
     FLOOR(
-        (
-            EXTRACT(
-                YEAR FROM AGE(
-                    month_data.date_period,
-                    owner.buying_date
+        GREATEST(
+            (
+                EXTRACT(
+                    YEAR FROM AGE(
+                        month_data.date_period,
+                        owner.buying_date
+                    )
+                ) * 12
+                +
+                EXTRACT(
+                    MONTH FROM AGE(
+                        month_data.date_period,
+                        owner.buying_date
+                    )
                 )
-            ) * 12
-            +
-            EXTRACT(
-                MONTH FROM AGE(
-                    month_data.date_period,
-                    owner.buying_date
-                )
-            )
+                - 1
+            ),
+            0
         )
         /
         (owner.mortgage_term_year * 12)

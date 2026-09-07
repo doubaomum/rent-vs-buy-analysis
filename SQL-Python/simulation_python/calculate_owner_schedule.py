@@ -143,6 +143,8 @@ def calculate_one_scenario(
     scheduled_payment = 0.0
     active_monthly_rate = 0.0
 
+    ## monthly recursion
+
     for index, row in scenario.iterrows():
 
         month_number = int(row["month_number"])
@@ -371,7 +373,6 @@ owner["cumulative_unrecoverable_cost"] = (
 # - remaining mortgage
 # - estimated cost to sell the house
 #
-# Do not subtract cumulative unrecoverable cost again.
 # =========================================================
 
 owner["owner_net_worth"] = (
