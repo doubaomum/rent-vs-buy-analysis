@@ -731,168 +731,312 @@ City + Calendar Year
 
 Because the source rent series is annual, the corresponding market-rent observation is used across the months of that calendar year.
 
-### 15.1 Rent-growth modes
+### 15.1 Rent-Growth Modes
 
 | City | Growth mode | Rent-control rate | Annual move probability | Move-cost multiplier |
 |---|---|---:|---:|---:|
-| Canada | mixed | 2.0% | 10% | 1.2 |
-| Toronto | controlled | 2.5% | 8% | 1.8 |
-| Vancouver | controlled | 3.0% | 7% | 2.0 |
-| Calgary | market | — | 15% | 1.2 |
-| Edmonton | market | — | 15% | 1.1 |
-| Ottawa | controlled | 2.5% | 9% | 1.4 |
-| Montreal | controlled | 2.5% | 10% | 1.2 |
+| Canada | mixed | 2.0% | 10% | 1.0 |
+| Toronto | controlled | 2.5% | 8% | 1.0 |
+| Vancouver | controlled | 2.5% | 8% | 1.0 |
+| Calgary | market | — | 12% | 1.0 |
+| Edmonton | market | — | 12% | 1.0 |
+| Ottawa | controlled | 2.5% | 8% | 1.0 |
+| Montreal | controlled | 2.5% | 8% | 1.0 |
 
-**On the controlled rates.** Ontario's 2.5% is the statutory ceiling under the Residential Tenancies Act rather than a typical year — guidelines hit that cap in 2023, 2024 and 2025, but fall to 2.1% in 2026 and 1.9% in 2027. Using the ceiling is the conservative choice for a controlled city, since it minimises the rent discount a long-tenured tenant accumulates. Vancouver's 3.0% is BC's 2025 limit; BC's cap varies annually and was frozen at zero in 2021. Montreal's 2.5% is a proxy, as Quebec sets rent through a case-by-case fixing framework rather than a published provincial cap.
+The rent-growth settings are designed to represent three broad rental-market regimes:
 
-A single rate is applied to all tenants in each regulated city for the full period. See §26 for what this simplification does and does not capture.
+- **Controlled:** rent grows at a standardized controlled rate while the renter remains in the same tenancy. A move resets the renter to market rent.
+- **Market:** actual renter rent follows the observed market-rent series directly.
+- **Mixed:** used for the Canada aggregate to represent a national market containing both regulated and market-oriented provincial systems.
 
-Current Python behavior is:
+The model does **not** attempt to reproduce every historical annual rent-control guideline. Instead, it uses standardized rates so that regulatory differences can be incorporated consistently across cities and historical scenarios.
 
-### Month 0
+### 15.2 Controlled-Rent Assumptions
+
+#### Toronto and Ottawa — 2.5%
+
+Ontario regulates rent increases for many existing tenancies through an annual rent-increase guideline, subject to a statutory ceiling of 2.5%.
+
+The actual guideline varies by year. Therefore, the model's **2.5%** rate should not be interpreted as the historical rate in every year. It is used as a standardized controlled-growth assumption for Toronto and Ottawa.
+
+When the renter moves, the simulation resets actual rent to the observed market rent, reflecting the distinction between the rent path of an existing tenancy and the rent faced when entering a new tenancy.
+
+**Evidence classification:** Source-supported regulatory framework with a standardized model rate.
+
+**Reference:** Ontario — Residential rent increases.
+
+#### Vancouver — 2.5%
+
+British Columbia also regulates annual rent increases for existing residential tenancies, but the permitted percentage changes over time.
+
+The model therefore does not attempt to reproduce BC's historical annual limits individually. Instead, Vancouver uses the same **2.5% standardized controlled-growth rate** as the other regulated city scenarios.
+
+The 2.5% value should therefore be interpreted as a **modeling parameter**, not as an official fixed BC rent-control rate.
+
+As with the other controlled cities, a renter move resets actual rent to the observed market-rent level.
+
+**Evidence classification:** Source-informed standardized controlled-rate assumption.
+
+**Reference:** Government of British Columbia — Residential rent increases.
+
+#### Montreal — 2.5%
+
+Quebec does not operate a simple province-wide fixed rent cap equivalent to the Ontario guideline. Rent adjustments can instead be influenced by the Tribunal administratif du logement's rent-fixing framework and building-specific costs.
+
+The model therefore uses **2.5% as a controlled-growth proxy** for Montreal.
+
+This value is not presented as an official Quebec rent-control ceiling. It is a standardized modeling assumption that allows Montreal to follow the same controlled-rent simulation structure as Toronto, Ottawa, and Vancouver.
+
+**Evidence classification:** Stylized controlled-rate proxy informed by Quebec's regulated rent-fixing framework.
+
+**Reference:** Tribunal administratif du logement — Rent increase and rent-fixing guidance.
+
+#### Calgary and Edmonton — Market Mode
+
+Alberta regulates how frequently rent can be increased but does not impose a general percentage ceiling comparable to the controlled-growth assumptions used for Ontario or British Columbia.
+
+Calgary and Edmonton are therefore modeled using:
+
+```text
+Growth Mode = Market
+```
+
+Under market mode:
+
+```text
+Actual Renter Rent = Market Rent
+```
+
+for every month.
+
+No rent-control rate is applied.
+
+A modeled move can still generate a moving cost, but it does not change the rent-growth calculation because the renter is already following the market-rent series.
+
+**Evidence classification:** Source-supported regulatory distinction.
+
+**Reference:** Government of Alberta — Information for tenants.
+
+#### Canada — 2.0% Mixed Rate
+
+Canada does not have a single national rent-control system because rental regulation differs across provinces.
+
+The national scenario therefore uses:
+
+```text
+Growth Mode = Mixed
+Rent-Control Rate = 2.0%
+```
+
+The **2.0% rate is a stylized national assumption**, not an official Canada-wide rent-control rate.
+
+It provides a middle national baseline while recognizing that the Canada aggregate contains both regulated and market-oriented rental systems.
+
+In the current implementation, `mixed` follows the same calculation branch as `controlled`. The separate label is retained so that a more detailed national mixed-regime methodology could be introduced in the future.
+
+**Evidence classification:** Stylized national modeling assumption.
+
+---
+
+### 15.3 Current Rent Calculation
+
+The renter simulation runs month by month.
+
+#### Month 0
+
+The renter begins at the observed market rent:
 
 ```text
 Actual Rent = Market Rent
 ```
 
-### Market mode
+#### Market Mode
+
+For Calgary and Edmonton:
 
 ```text
 Actual Rent = Market Rent
 ```
 
-### Renter moves
+The renter therefore follows the observed market-rent series directly.
+
+#### Controlled or Mixed Mode — Renter Moves
+
+If a renter moves:
 
 ```text
 Actual Rent = Market Rent
 ```
 
-### Otherwise
+The move therefore resets the renter from the existing tenancy rent path to the current market-rent level.
+
+#### Controlled or Mixed Mode — Renter Does Not Move
+
+The annual controlled rate is converted to a monthly rate:
 
 ```text
-Monthly Rent-Control Rate = Annual Rent-Control Rate / 12
+Monthly Rent-Control Rate
+= Annual Rent-Control Rate / 12
 ```
+
+The next month's rent is then:
 
 ```text
-Actual Rent = Previous Actual Rent × (1 + Monthly Rent-Control Rate)
+Actual Rent
+= Previous Actual Rent
+× (1 + Monthly Rent-Control Rate)
 ```
 
-with:
+with the additional constraint:
 
 ```text
 Actual Rent ≤ Market Rent
 ```
 
-In the current implementation, any non-`market` mode follows this controlled-rent branch. Therefore, `mixed` is currently behaviorally equivalent to `controlled` and is retained for potential future extension.
+This prevents the controlled-rent path from increasing above the observed market rent.
 
-### 15.2 Why the city-level rent-growth parameters are used
-
-The rent-growth settings are intended to represent **different regulatory regimes**, not to reproduce every historical annual guideline exactly.
-
-#### Toronto and Ottawa — 2.5% controlled rate
-
-Ontario's rent-increase guideline is based on the Ontario CPI and is legally capped at **2.5%** for most covered tenancies. The guideline itself changes by year — for example it was 2.5% in both 2024 and 2025 and 2.1% in 2026 — so the model's 2.5% is a representative regulated-growth parameter rather than a year-by-year historical series.
-
-The model also resets rent to market when the renter moves, which is consistent with the fact that Ontario's guideline does not apply to rental-unit turnover in the same way as an existing controlled tenancy.
-
-**Evidence classification:** Source-supported regulatory ceiling used as a standardized controlled-rate assumption.  
-**Reference URL:** https://www.ontario.ca/page/residential-rent-increases
-
-#### Vancouver — 3.0% controlled rate
-
-British Columbia sets an annual residential rent-increase limit. The official limit was **3.0% for 2025** and 2.3% for 2026. The model uses 3.0% as a representative regulated-rent growth rate for Vancouver rather than loading a separate historical limit for every year.
-
-**Evidence classification:** Source-informed standardized controlled-rate assumption.  
-**Reference URL:** https://www2.gov.bc.ca/gov/content/housing-tenancy/residential-tenancies/rent-rtb/rent-increases
-
-#### Calgary and Edmonton — market mode
-
-Alberta requires minimum timing between rent increases but does **not** impose a general percentage limit on how much rent may be raised. This supports treating Calgary and Edmonton differently from Ontario and British Columbia. In the simulation, `market` mode sets actual rent equal to the observed market-rent series rather than applying a regulatory growth cap.
-
-**Evidence classification:** Source-supported regulatory regime; the 15% mobility parameter is separate and remains a stylized calibration.  
-**Reference URL:** https://open.alberta.ca/publications/information-for-tenants
-
-#### Montreal — 2.5% controlled-rate proxy
-
-Quebec does not operate a simple province-wide fixed 2.5% cap comparable to Ontario. The Tribunal administratif du logement establishes annual percentages used in a building-specific rent-fixing calculation that considers actual expenses such as taxes, insurance, maintenance, and capital expenditures.
-
-Accordingly, the model's Montreal 2.5% rate is **not presented as an official Quebec cap**. It is a stylized controlled-growth proxy used so Montreal can follow the model's controlled-rent branch while preserving a simple, comparable framework across cities.
-
-**Evidence classification:** Stylized model calibration informed by the existence of a regulated rent-fixing framework; exact 2.5% is not an official TAL rate.  
-**Reference URLs:**  
-- https://www.tal.gouv.qc.ca/en/renewal-of-the-lease-and-fixing-of-rent/applicable-percentages-to-the-criteria-for-the-fixing-of-rent  
-- https://www.tal.gouv.qc.ca/en/renewal-of-the-lease-and-fixing-of-rent/rent-increase
-
-#### Canada — 2.0% mixed rate
-
-The national `mixed` setting is a stylized aggregate used to represent a country that contains both regulated and market-oriented provincial rental regimes. The 2.0% value is not an official Canada-wide rent-control rate. It is deliberately lower than the city-level controlled proxies and is retained as a neutral national calibration.
-
-**Evidence classification:** Stylized national modeling assumption; no official Canada-wide source exists for a 2.0% rent-control cap.
+In the current Python implementation, both `controlled` and `mixed` use this controlled-growth logic, while `market` follows market rent directly.
 
 ---
 
 ## 16. Renter Mobility
 
-The model includes renter moves because moving can reset a rent-controlled tenant to market rent and create additional relocation costs.
+The model includes renter mobility because moving can affect both the renter's rent path and monthly cash flow.
+
+For a controlled renter, a move resets rent to the current market level.
+
+A move also generates a one-time relocation cost.
 
 Moves are stochastic but reproducible.
 
+### 16.1 Annual Move Probabilities
+
+The model uses:
+
+| Market type | Cities | Annual move probability |
+|---|---|---:|
+| Controlled | Toronto, Vancouver, Ottawa, Montreal | 8% |
+| Mixed | Canada | 10% |
+| Market | Calgary, Edmonton | 12% |
+
+The assumptions intentionally distinguish between regulated and market-oriented rental environments.
+
+Controlled cities receive the lowest probability because remaining in an existing tenancy may preserve a below-market rent path.
+
+Calgary and Edmonton receive a moderately higher probability because the model does not include the same rent-control lock-in benefit.
+
+Canada uses **10%** as an intermediate national assumption.
+
+These probabilities are **stylized model calibrations**, rather than city-specific mobility estimates directly measured from Census data.
+
+Statistics Canada mobility data support the broader assumption that renter turnover is economically meaningful, but they do not directly establish the exact 8%, 10%, or 12% values used here.
+
+**Evidence classification:** Stylized mobility calibration informed by renter-mobility evidence.
+
+**Reference:** Statistics Canada, 2021 Census renter-mobility analysis.
+
+---
+
+### 16.2 Annual-to-Monthly Move Probability
+
+Because the simulation operates monthly, the annual move probability must be converted into a monthly probability.
+
+The current SQL implementation uses:
+
 ```text
-Random Seed = 42 + owner_scenario_id
+Monthly Move Probability
+= Annual Move Probability / 12
 ```
 
-A random number between 0 and 1 is generated for each month. The renter moves when:
+Therefore, the approximate monthly probabilities are:
+
+| Annual probability | Monthly probability |
+|---:|---:|
+| 8% | 0.667% |
+| 10% | 0.833% |
+| 12% | 1.000% |
+
+This is a simple monthly approximation used to keep the mobility assumption transparent and easy to interpret.
+
+---
+
+### 16.3 Move Generation and Reproducibility
+
+For each month, Python generates a random number between 0 and 1.
+
+A move occurs when:
 
 ```text
 Random Number < Monthly Move Probability
 ```
 
-Month 0 is always forced to no move.
+Month 0 is always forced to:
 
-Because the seed is based on the owner scenario, the TSX and S&P 500 renter variants linked to the same owner scenario experience the same move sequence.
+```text
+Renter Moves = False
+```
 
-### 16.1 Why the move probabilities are 7%–15%
+The current implementation uses:
 
-Renter turnover matters because a move can reset a controlled tenant from their existing rent path to current market rent. Statistics Canada data support treating renter mobility as economically meaningful: in the 2021 Census, **21.0% of renter households were classified as recent renter households**, meaning all household members had moved into the dwelling within the previous year.
+```text
+Random Seed = 42
+```
 
-However, that national Census measure is **not equivalent to the exact annual probability used in this simulation**, and it does not justify a precise 7%, 8%, 9%, 10%, or 15% city rate. The model therefore treats the city-specific move probabilities as stylized calibrations:
+The number **42 has no economic interpretation**. It is simply a technical seed used to make the simulation reproducible.
 
-- lower probabilities are assigned to the controlled markets, where remaining in place can preserve below-market rent;
-- higher 15% probabilities are assigned to Calgary and Edmonton, where the model uses market rent and there is no modeled rent-control lock-in benefit;
-- the Canada 10% value provides a middle national calibration.
+Because the random generator is initialized with the same fixed seed for each renter scenario, the same underlying random-number sequence is reused across comparable scenarios.
 
-These values are designed to introduce plausible renter turnover without allowing one highly volatile random path to dominate the model.
+This is particularly useful when comparing TSX and S&P 500 portfolio scenarios because differences in portfolio outcomes are not caused by independently generated random moving histories.
 
-**Evidence classification:** Stylized city calibration, informed by national renter-mobility evidence but not directly estimated from it.  
-**Reference URL:** https://www12.statcan.gc.ca/census-recensement/2021/as-sa/98-200-X/2021016/98-200-x2021016-eng.cfm
-
-### 16.2 Why the random seed is `42 + owner_scenario_id`
-
-The number 42 has **no economic interpretation**. It is simply a fixed base seed used to make the stochastic move process reproducible. Adding the `owner_scenario_id` gives each owner scenario a different random sequence while ensuring that rerunning the same scenario produces the same moves.
-
-This design also keeps the move path identical between the TSX and S&P 500 renter variants associated with the same owner scenario. As a result, portfolio comparisons are not contaminated by different random moving histories.
+Actual move outcomes can still differ across cities when their monthly move probabilities differ.
 
 **Evidence classification:** Technical reproducibility convention; no external economic source is required.
 
-### 16.3 Moving cost
+---
+
+### 16.4 Moving Cost
+
+When a renter moves:
 
 ```text
-Move Cost = Actual Renter Rent × Move Cost Multiplier
+Move Cost
+= Actual Renter Rent
+× Move Cost Multiplier
 ```
 
-If no move occurs, move cost is zero.
+The model now applies:
 
-#### Why the move-cost multipliers range from 1.1 to 2.0 months of rent
+```text
+Move Cost Multiplier = 1.0
+```
 
-The moving-cost multipliers are stylized **all-in relocation-cost assumptions**, not published city averages. They are designed to capture costs that can accompany a move — movers or vehicle rental, temporary rent overlap, cleaning, utility or service setup, small replacement purchases, and other transaction/friction costs — using rent as a scale factor that automatically adjusts with the local rental market.
+to every city.
 
-Higher multipliers are assigned to Toronto (1.8) and Vancouver (2.0), where the modeled rental market is more expensive and a move may involve greater cash friction; lower multipliers are used in Calgary (1.2), Edmonton (1.1), Montreal (1.2), and the Canada aggregate (1.2), with Ottawa at 1.4.
+Therefore:
 
-These exact multipliers are intentionally transparent scenario calibrations. They should not be interpreted as measured average moving costs for each city.
+```text
+Move Cost = One Month of Actual Rent
+```
 
-**Evidence classification:** Stylized city calibration; no authoritative city-level source is used for the exact multipliers.
+If no move occurs:
 
----
+```text
+Move Cost = 0
+```
+
+The one-month-rent assumption is a **stylized all-in relocation-cost proxy**, rather than a measured average moving cost.
+
+It is intended to represent the financial friction associated with moving, which may include movers or vehicle rental, temporary rent overlap, cleaning, utility setup, and other small relocation expenses.
+
+Using the same **1.0 multiplier across all cities** has two advantages.
+
+First, it keeps the moving-cost assumption simple and transparent.
+
+Second, it avoids introducing additional arbitrary city-level differences into the model. Differences in absolute moving costs still arise naturally because one month of rent is more expensive in higher-rent markets.
+
+This allows city-level renter outcomes to be driven primarily by observed rent levels, regulatory regime, and mobility assumptions rather than by separately calibrated moving-cost multipliers.
+
+**Evidence classification:** Stylized standardized modeling assumption; the exact one-month multiplier is not presented as an observed city-level average.
 
 ## 17. Renter Monthly Cash Outflow
 

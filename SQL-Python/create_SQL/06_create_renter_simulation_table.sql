@@ -84,54 +84,52 @@ VALUES
     (
         'Canada',
         'mixed',
-        0.020,
-        0.10,
-        1.2
+        0.020,     -- 2.0%
+        0.10,      -- 10%
+        1.0
     ),
     (
         'Toronto',
         'controlled',
-        0.025,
-        0.08,
-        1.8
+        0.025,     -- 2.5%
+        0.08,      -- 8%
+        1.0
     ),
     (
         'Vancouver',
         'controlled',
-        0.030,
-        0.07,
-        2.0
+        0.025,     -- 2.5%
+        0.08,      -- 8%
+        1.0
     ),
     (
         'Calgary',
         'market',
-        NULL,
-        0.15,
-        1.2
+        NULL,      -- no rent-control rate
+        0.12,      -- 12%
+        1.0
     ),
     (
         'Edmonton',
         'market',
-        NULL,
-        0.15,
-        1.1
+        NULL,      -- no rent-control rate
+        0.12,      -- 12%
+        1.0
     ),
     (
         'Ottawa',
         'controlled',
-        0.025,
-        0.09,
-        1.4
+        0.025,     -- 2.5%
+        0.08,      -- 8%
+        1.0
     ),
     (
         'Montreal',
         'controlled',
-        0.025,
-        0.10,
-        1.2
+        0.025,     -- 2.5%
+        0.08,      -- 8%
+        1.0
     );
-
-
 
 DROP TABLE IF EXISTS simulation.renter_monthly_schedule;
 
@@ -492,10 +490,15 @@ SELECT
     renter_policy.annual_move_probability,
 
     (
-        renter_policy.annual_move_probability
-        / 12.0
+    1
+    -
+    POWER(
+        1
+        - renter_policy.annual_move_probability,
+        1.0 / 12.0
     )
-        AS monthly_move_probability,
+    )
+    AS monthly_move_probability,
 
     renter_policy.move_cost_multiplier,
 
