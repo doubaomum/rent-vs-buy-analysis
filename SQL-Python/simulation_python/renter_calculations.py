@@ -1,174 +1,12 @@
-import os
-import gc
+"""Original renter recursion separated from database operations.
 
+calculate_one_renter_scenario is copied unchanged from the supplied original.
+"""
 import numpy as np
 import pandas as pd
-from sqlalchemy import create_engine, text
 
+RESULT_COLUMNS = ['renter_scenario_id', 'random_move', 'renter_moves', 'actual_renter_rent', 'move_cost', 'renter_total_cash_outflow', 'monthly_savings_difference', 'renter_monthly_investment', 'sp500_return', 'tsx_return', 'portfolio_return', 'portfolio_return_net', 'renter_portfolio_value', 'renter_net_worth', 'owner_net_worth_real', 'renter_net_worth_real', 'owner_net_worth_index', 'renter_net_worth_index']
 
-# =========================================================
-# 1. Settings
-# =========================================================
-BATCH_SIZE = 500
-
-TEMP_TABLE_NAME = "_renter_monthly_results"
-
-
-# =========================================================
-# 2. PostgreSQL connection
-# =========================================================
-database_password = os.getenv("POSTGRES_PASSWORD")
-
-if not database_password:
-    raise ValueError(
-        "POSTGRES_PASSWORD environment variable is not set."
-    )
-
-engine = create_engine(
-    f"postgresql+psycopg2://postgres:"
-    f"{database_password}@localhost:5432/rentvsbuy"
-)
-
-
-# =========================================================
-# 3. Load stock prices once
-# =========================================================
-sp500 = pd.read_sql_query(
-    """
-    SELECT
-        date_period,
-        price_cad
-    FROM analysis.sp500_index_1990_100
-    WHERE date_period <= DATE '2025-12-01'
-    ORDER BY date_period
-    """,
-    engine,
-    parse_dates=["date_period"],
-)
-
-tsx = pd.read_sql_query(
-    """
-    SELECT
-        date_period,
-        price_cad
-    FROM analysis.tsx_index_1990_100
-    WHERE date_period <= DATE '2025-12-01'
-    ORDER BY date_period
-    """,
-    engine,
-    parse_dates=["date_period"],
-)
-
-# =========================================================
-# 3B. Load Canada CPI once
-# =========================================================
-canada_cpi = pd.read_sql_query(
-    """
-    SELECT
-        date_period,
-        cpi_value
-    FROM stg.canada_cpi
-    WHERE date_period <= DATE '2025-12-01'
-    ORDER BY date_period
-    """,
-    engine,
-    parse_dates=["date_period"],
-)
-
-canada_cpi["cpi_value"] = pd.to_numeric(
-    canada_cpi["cpi_value"],
-    errors="coerce",
-)
-
-canada_cpi = (
-    canada_cpi
-    .dropna(
-        subset=[
-            "date_period",
-            "cpi_value",
-        ]
-    )
-    .loc[
-        lambda df: df["cpi_value"] > 0
-    ]
-    .sort_values("date_period")
-    .drop_duplicates(
-        subset=["date_period"],
-        keep="last",
-    )
-    .reset_index(drop=True)
-)
-
-# =========================================================
-# 4. Prepare stock returns
-# =========================================================
-sp500["price_cad"] = pd.to_numeric(
-    sp500["price_cad"],
-    errors="coerce",
-)
-
-tsx["price_cad"] = pd.to_numeric(
-    tsx["price_cad"],
-    errors="coerce",
-)
-
-sp500 = (
-    sp500
-    .dropna(subset=["price_cad"])
-    .sort_values("date_period")
-    .drop_duplicates(
-        subset=["date_period"],
-        keep="last",
-    )
-    .reset_index(drop=True)
-)
-
-tsx = (
-    tsx
-    .dropna(subset=["price_cad"])
-    .sort_values("date_period")
-    .drop_duplicates(
-        subset=["date_period"],
-        keep="last",
-    )
-    .reset_index(drop=True)
-)
-
-sp500["sp500_return"] = (
-    sp500["price_cad"]
-    .pct_change(fill_method=None)
-)
-
-tsx["tsx_return"] = (
-    tsx["price_cad"]
-    .pct_change(fill_method=None)
-)
-
-stock_returns = (
-    sp500[
-        [
-            "date_period",
-            "sp500_return",
-        ]
-    ]
-    .merge(
-        tsx[
-            [
-                "date_period",
-                "tsx_return",
-            ]
-        ],
-        on="date_period",
-        how="outer",
-    )
-    .sort_values("date_period")
-    .reset_index(drop=True)
-)
-
-
-# =========================================================
-# 5. Calculate one complete renter scenario
-# =========================================================
 def calculate_one_renter_scenario(
     scenario: pd.DataFrame,
 ) -> pd.DataFrame:
@@ -563,186 +401,133 @@ def calculate_one_renter_scenario(
     return scenario
 
 
-# =========================================================
-# 6. PostgreSQL update query
-# =========================================================
-update_query = text(
-    """
-    UPDATE simulation.renter_monthly_schedule AS target
-    SET
-        random_move =
-            source.random_move,
-
-        renter_moves =
-            source.renter_moves,
-
-        actual_renter_rent =
-            source.actual_renter_rent,
-
-        move_cost =
-            source.move_cost,
-
-        renter_total_cash_outflow =
-            source.renter_total_cash_outflow,
-
-        monthly_savings_difference =
-            source.monthly_savings_difference,
-
-        renter_monthly_investment =
-            source.renter_monthly_investment,
-
-        sp500_return =
-            source.sp500_return,
-
-        tsx_return =
-            source.tsx_return,
-
-        portfolio_return =
-            source.portfolio_return,
-
-        portfolio_return_net =
-            source.portfolio_return_net,
-
-        renter_portfolio_value =
-            source.renter_portfolio_value,
-
-        renter_net_worth =
-            source.renter_net_worth,
-        
-        owner_net_worth_real =
-            source.owner_net_worth_real,
-
-        renter_net_worth_real =
-            source.renter_net_worth_real,
-
-        owner_net_worth_index =
-            source.owner_net_worth_index,
-
-        renter_net_worth_index =
-            source.renter_net_worth_index
-
-    FROM simulation._renter_monthly_results AS source
-
-    WHERE target.renter_scenario_id =
-          source.renter_scenario_id;
-    """
-)
-
-
-# =========================================================
-# 7. Get renter scenario range
-# =========================================================
-scenario_range = pd.read_sql_query(
-    """
-    SELECT
-        MIN(owner_scenario_id) AS min_id,
-        MAX(owner_scenario_id) AS max_id
-    FROM simulation.renter_monthly_schedule
-    WHERE date_period <= DATE '2025-12-01'
-    """,
-    engine,
-)
-
-if (
-    scenario_range.empty
-    or pd.isna(
-        scenario_range.loc[0, "min_id"]
-    )
-):
-    raise ValueError(
-        "renter_monthly_schedule contains no rows."
+def prepare_market_data(sp500, tsx, canada_cpi):
+    """Keep the original CPI cleanup and price_cad percentage-change formula."""
+    sp500 = sp500.copy()
+    tsx = tsx.copy()
+    canada_cpi = canada_cpi.copy()
+    for frame in (sp500, tsx, canada_cpi):
+        frame["date_period"] = pd.to_datetime(frame["date_period"])
+    canada_cpi["cpi_value"] = pd.to_numeric(
+        canada_cpi["cpi_value"],
+        errors="coerce",
     )
 
-min_id = int(
-    scenario_range.loc[0, "min_id"]
-)
-
-max_id = int(
-    scenario_range.loc[0, "max_id"]
-)
-
-
-# =========================================================
-# 8. Process renter scenarios in batches
-# =========================================================
-total_updated_rows = 0
-
-for batch_start in range(
-    min_id,
-    max_id + 1,
-    BATCH_SIZE,
-):
-    batch_end = (
-        batch_start
-        + BATCH_SIZE
-        - 1
+    canada_cpi = (
+        canada_cpi
+        .dropna(
+            subset=[
+                "date_period",
+                "cpi_value",
+            ]
+        )
+        .loc[
+            lambda df: df["cpi_value"] > 0
+        ]
+        .sort_values("date_period")
+        .drop_duplicates(
+            subset=["date_period"],
+            keep="last",
+        )
+        .reset_index(drop=True)
     )
 
-    print(
-        f"\nLoading owner scenarios "
-        f"{batch_start} to {batch_end}..."
+    # =========================================================
+    # 4. Prepare stock returns
+    # =========================================================
+    sp500["price_cad"] = pd.to_numeric(
+        sp500["price_cad"],
+        errors="coerce",
     )
 
-    renter = pd.read_sql_query(
-        """
-        SELECT
-            renter_scenario_id,
-            owner_scenario_id,
-
-            date_period,
-            month_number,
-
-            city,
-
-            market_rent,
-            rent_growth_mode,
-            rent_control_rate,
-            monthly_move_probability,
-            move_cost_multiplier,
-
-            renter_discipline,
-            initial_renter_investment,
-
-            portfolio_name,
-            monthly_investment_cost,
-
-            owner_total_cash_outflow,
-            owner_net_worth
-
-        FROM simulation.renter_monthly_schedule
-
-        WHERE owner_scenario_id
-              BETWEEN %(batch_start)s
-              AND %(batch_end)s
-
-          AND date_period <= DATE '2025-12-01'
-
-        ORDER BY
-            owner_scenario_id,
-            portfolio_name,
-            renter_discipline,
-            month_number
-        """,
-        engine,
-        params={
-            "batch_start": batch_start,
-            "batch_end": batch_end,
-        },
-        parse_dates=[
-            "date_period",
-        ],
+    tsx["price_cad"] = pd.to_numeric(
+        tsx["price_cad"],
+        errors="coerce",
     )
 
-    if renter.empty:
-        continue
-
-    print(
-        f"Loaded {len(renter):,} rows."
+    sp500 = (
+        sp500
+        .dropna(subset=["price_cad"])
+        .sort_values("date_period")
+        .drop_duplicates(
+            subset=["date_period"],
+            keep="last",
+        )
+        .reset_index(drop=True)
     )
 
-    # -----------------------------------------------------
-    # Convert PostgreSQL NUMERIC columns to float
-    # -----------------------------------------------------
+    tsx = (
+        tsx
+        .dropna(subset=["price_cad"])
+        .sort_values("date_period")
+        .drop_duplicates(
+            subset=["date_period"],
+            keep="last",
+        )
+        .reset_index(drop=True)
+    )
+
+    sp500["sp500_return"] = (
+        sp500["price_cad"]
+        .pct_change(fill_method=None)
+    )
+
+    tsx["tsx_return"] = (
+        tsx["price_cad"]
+        .pct_change(fill_method=None)
+    )
+
+    stock_returns = (
+        sp500[
+            [
+                "date_period",
+                "sp500_return",
+            ]
+        ]
+        .merge(
+            tsx[
+                [
+                    "date_period",
+                    "tsx_return",
+                ]
+            ],
+            on="date_period",
+            how="outer",
+        )
+        .sort_values("date_period")
+        .reset_index(drop=True)
+    )
+    # Extra date metadata validates adjacent months without changing the returns.
+    for frame, name in ((sp500, "sp500"), (tsx, "tsx")):
+        previous = frame[["date_period"]].copy()
+        previous[name + "_previous_period"] = frame["date_period"].shift(1)
+        stock_returns = stock_returns.merge(previous, on="date_period", how="left", validate="one_to_one")
+    return stock_returns, canada_cpi
+
+
+def validate_merged_inputs(renter):
+    required = ["market_rent", "monthly_move_probability", "move_cost_multiplier",
+                "renter_discipline", "initial_renter_investment", "monthly_investment_cost",
+                "owner_total_cash_outflow", "owner_net_worth", "cpi_value"]
+    values = renter[required].to_numpy(dtype=float)
+    if not np.isfinite(values).all():
+        raise ValueError("Missing or nonfinite rent, owner, CPI or policy input in the renter batch.")
+    if (renter["market_rent"] <= 0).any() or (renter["cpi_value"] <= 0).any():
+        raise ValueError("Renter market rent and CPI must be positive.")
+    investing = renter["month_number"].gt(0)
+    expected_previous = renter["date_period"] - pd.offsets.MonthBegin(1)
+    for name in ("sp500", "tsx"):
+        valid = np.isfinite(renter[name + "_return"].to_numpy(dtype=float))
+        adjacent = renter[name + "_previous_period"].eq(expected_previous)
+        bad = investing & (~valid | ~adjacent)
+        if bad.any():
+            first = renter.loc[bad, ["date_period", "city"]].iloc[0]
+            raise ValueError(f"Missing consecutive monthly {name} prices for {first['date_period']}, {first['city']}; no zero return was assumed.")
+
+
+def calculate_renter_batch(renter, stock_returns, canada_cpi):
+    renter = renter.copy()
+    renter["date_period"] = pd.to_datetime(renter["date_period"])
     numeric_columns = [
         "market_rent",
         "rent_control_rate",
@@ -779,19 +564,10 @@ for batch_start in range(
         how="left",
     )
 
-    renter["sp500_return"] = (
-        renter["sp500_return"]
-        .fillna(0.0)
-    )
+    validate_merged_inputs(renter)
+    # Only the starting month has no applied return; the original function sets it to zero.
+    # Missing investment-month returns are errors, rather than assumed zero returns.
 
-    renter["tsx_return"] = (
-        renter["tsx_return"]
-        .fillna(0.0)
-    )
-
-    # -----------------------------------------------------
-    # Calculate each complete renter scenario
-    # -----------------------------------------------------
     scenario_columns = [
         "owner_scenario_id",
         "portfolio_name",
@@ -816,131 +592,4 @@ for batch_start in range(
         ignore_index=True,
     )
 
-    # -----------------------------------------------------
-    # Show one calculated scenario
-    # -----------------------------------------------------
-    first_scenario = renter[
-        (
-            renter["owner_scenario_id"]
-            == renter.iloc[0][
-                "owner_scenario_id"
-            ]
-        )
-        & (
-            renter["portfolio_name"]
-            == renter.iloc[0][
-                "portfolio_name"
-            ]
-        )
-        & (
-            renter["renter_discipline"]
-            == renter.iloc[0][
-                "renter_discipline"
-            ]
-        )
-    ]
-
-    print(
-        first_scenario[
-            [
-                "owner_scenario_id",
-                "date_period",
-                "month_number",
-                "owner_net_worth",
-                "owner_net_worth_index",
-                "renter_net_worth",
-                "renter_net_worth_index",
-            ]
-        ].head(5)
-    )
-
-    # -----------------------------------------------------
-    # Keep result columns
-    # -----------------------------------------------------
-    results = renter[
-    [
-        "renter_scenario_id",
-        "random_move",
-        "renter_moves",
-        "actual_renter_rent",
-        "move_cost",
-        "renter_total_cash_outflow",
-        "monthly_savings_difference",
-        "renter_monthly_investment",
-        "sp500_return",
-        "tsx_return",
-        "portfolio_return",
-        "portfolio_return_net",
-        "renter_portfolio_value",
-        "renter_net_worth",
-        "owner_net_worth_real",
-        "renter_net_worth_real",
-        "owner_net_worth_index",
-        "renter_net_worth_index",
-    ]
-    ].copy()
-    # -----------------------------------------------------
-    # Write temporary table
-    # -----------------------------------------------------
-    print(
-        "Writing temporary renter results..."
-    )
-
-    results.to_sql(
-        name=TEMP_TABLE_NAME,
-        con=engine,
-        schema="simulation",
-        if_exists="replace",
-        index=False,
-        chunksize=5000,
-        method="multi",
-    )
-
-    # -----------------------------------------------------
-    # Update permanent table
-    # -----------------------------------------------------
-    print(
-        "Updating renter_monthly_schedule..."
-    )
-
-    with engine.begin() as connection:
-        connection.execute(
-            update_query
-        )
-
-        connection.execute(
-            text(
-                f"""
-                DROP TABLE IF EXISTS
-                simulation.{TEMP_TABLE_NAME};
-                """
-            )
-        )
-
-    batch_row_count = len(results)
-
-    total_updated_rows += (
-        batch_row_count
-    )
-
-    print(
-        f"Updated {batch_row_count:,} rows "
-        f"for owner scenarios "
-        f"{batch_start} to {batch_end}."
-    )
-
-    # -----------------------------------------------------
-    # Release memory before next batch
-    # -----------------------------------------------------
-    del renter
-    del results
-    del calculated_scenarios
-
-    gc.collect()
-
-
-print(
-    f"\nAll renter batches finished. "
-    f"Total updated rows: "
-    f"{total_updated_rows:,}."
-)
+    return renter[RESULT_COLUMNS].copy()
