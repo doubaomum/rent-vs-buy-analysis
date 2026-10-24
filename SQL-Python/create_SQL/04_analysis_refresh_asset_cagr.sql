@@ -1,3 +1,6 @@
+-- Full refresh from current staging. Run through update_analysis.py in one transaction.
+-- Preserve the existing analysis table objects and the original financial formulas.
+
 ---Rows: Start year
 --Columns: Holding years
 --Values: CAGR
@@ -15,9 +18,7 @@
 -- Holding periods: 5, 10, 15, 20, 25, 30, and 35 years
 -- Uses Q1 data as the annual starting observation
 -- =========================================================
-DROP TABLE IF EXISTS analysis.canada_house_cagr;
-
-CREATE TABLE analysis.canada_house_cagr (
+CREATE TABLE IF NOT EXISTS analysis.canada_house_cagr (
     start_date DATE,
     end_date DATE,
     start_year INTEGER,
@@ -27,6 +28,8 @@ CREATE TABLE analysis.canada_house_cagr (
     end_price NUMERIC,
     cagr NUMERIC
 );
+
+DELETE FROM analysis.canada_house_cagr;
 
 INSERT INTO analysis.canada_house_cagr (
     start_date,
@@ -86,9 +89,7 @@ ORDER BY
 -- Uses January data as the annual starting observation
 -- =========================================================
 
-DROP TABLE IF EXISTS analysis.sp500_cagr;
-
-CREATE TABLE analysis.sp500_cagr (
+CREATE TABLE IF NOT EXISTS analysis.sp500_cagr (
     start_date DATE,
     end_date DATE,
     start_year INTEGER,
@@ -98,6 +99,8 @@ CREATE TABLE analysis.sp500_cagr (
     end_price NUMERIC,
     cagr NUMERIC
 );
+
+DELETE FROM analysis.sp500_cagr;
 
 INSERT INTO analysis.sp500_cagr (
     start_date,
@@ -160,9 +163,7 @@ ORDER BY
 -- Uses January data as the annual starting observation
 -- =========================================================
 
-DROP TABLE IF EXISTS analysis.tsx_cagr;
-
-CREATE TABLE analysis.tsx_cagr (
+CREATE TABLE IF NOT EXISTS analysis.tsx_cagr (
     start_date DATE,
     end_date DATE,
     start_year INTEGER,
@@ -172,6 +173,8 @@ CREATE TABLE analysis.tsx_cagr (
     end_price NUMERIC,
     cagr NUMERIC
 );
+
+DELETE FROM analysis.tsx_cagr;
 
 INSERT INTO analysis.tsx_cagr (
     start_date,
@@ -234,9 +237,7 @@ ORDER BY
 -- Uses January data as the annual starting observation
 -- =========================================================
 
-DROP TABLE IF EXISTS analysis.vt_cagr;
-
-CREATE TABLE analysis.vt_cagr (
+CREATE TABLE IF NOT EXISTS analysis.vt_cagr (
     start_date DATE,
     end_date DATE,
     start_year INTEGER,
@@ -246,6 +247,8 @@ CREATE TABLE analysis.vt_cagr (
     end_price NUMERIC,
     cagr NUMERIC
 );
+
+DELETE FROM analysis.vt_cagr;
 
 INSERT INTO analysis.vt_cagr (
     start_date,
@@ -297,44 +300,7 @@ ORDER BY
     holding.holding_years;
 
 
-DROP TABLE IF EXISTS analysis.sum_canada_stock_cagr;
 
-CREATE TABLE analysis.sum_canada_stock_cagr AS
-SELECT 
-    canada.start_date AS start_date, 
-    canada.end_date AS end_date,
-    canada.start_year AS start_year,
-    canada.end_year AS end_year,
-    canada.holding_years AS holding_years,
-    canada.cagr AS canada_cagr,
-    sp500.cagr AS  sp500_cagr,
-    tsx.cagr AS  tsx_cagr,
-    city.vancouver_cagr AS vancouver_cagr,
-    city.calgary_cagr AS calgary_cagr,
-    city.edmonton_cagr AS edmonton_cagr,
-    city.toronto_cagr AS toronto_cagr,
-    city.ottawa_cagr AS ottawa_cagr,
-    city.montreal_cagr AS montreal_cagr
-
-FROM analysis.canada_house_cagr AS canada
-
-lEFT JOIN analysis.sp500_cagr AS sp500
-    ON canada.start_year=sp500.start_year
-    AND canada.holding_years=sp500.holding_years
-
-LEFT JOIN analysis.tsx_cagr AS tsx
-    ON canada.start_year  =tsx.start_year
-    AND canada.holding_years =tsx.holding_years
-
-LEFT JOIN analysis.city_house_cagr AS city
-    ON canada.start_year  =city.start_year
-    AND canada.holding_years =city.holding_years;
-
-
-
-SELECT *
-FROM simulation.rent_monthly_schedule
-WHERE renter_net_worth_real IS NULL;
 
 -- =========================================================
 -- City-Level Real House Price CAGR Analysis
@@ -344,9 +310,7 @@ WHERE renter_net_worth_real IS NULL;
 -- Uses January data as the annual starting observation
 -- =========================================================
 
-DROP TABLE IF EXISTS analysis.city_house_cagr;
-
-CREATE TABLE analysis.city_house_cagr (
+CREATE TABLE IF NOT EXISTS analysis.city_house_cagr (
     start_date DATE,
     end_date DATE,
     start_year INTEGER,
@@ -381,6 +345,8 @@ CREATE TABLE analysis.city_house_cagr (
     montreal_end_price NUMERIC,
     montreal_cagr NUMERIC
 );
+
+DELETE FROM analysis.city_house_cagr;
 
 INSERT INTO analysis.city_house_cagr (
     start_date,
@@ -544,3 +510,73 @@ WHERE EXTRACT(MONTH FROM start_data.date_period) = 1
 ORDER BY
     start_data.date_period,
     holding.holding_years;
+
+-- Build the summary after every component CAGR table is refreshed.
+CREATE TABLE IF NOT EXISTS analysis.sum_canada_stock_cagr AS
+SELECT 
+    canada.start_date AS start_date, 
+    canada.end_date AS end_date,
+    canada.start_year AS start_year,
+    canada.end_year AS end_year,
+    canada.holding_years AS holding_years,
+    canada.cagr AS canada_cagr,
+    sp500.cagr AS  sp500_cagr,
+    tsx.cagr AS  tsx_cagr,
+    city.vancouver_cagr AS vancouver_cagr,
+    city.calgary_cagr AS calgary_cagr,
+    city.edmonton_cagr AS edmonton_cagr,
+    city.toronto_cagr AS toronto_cagr,
+    city.ottawa_cagr AS ottawa_cagr,
+    city.montreal_cagr AS montreal_cagr
+
+FROM analysis.canada_house_cagr AS canada
+
+lEFT JOIN analysis.sp500_cagr AS sp500
+    ON canada.start_year=sp500.start_year
+    AND canada.holding_years=sp500.holding_years
+
+LEFT JOIN analysis.tsx_cagr AS tsx
+    ON canada.start_year  =tsx.start_year
+    AND canada.holding_years =tsx.holding_years
+
+LEFT JOIN analysis.city_house_cagr AS city
+    ON canada.start_year  =city.start_year
+    AND canada.holding_years =city.holding_years
+WITH NO DATA;
+
+DELETE FROM analysis.sum_canada_stock_cagr;
+
+INSERT INTO analysis.sum_canada_stock_cagr (
+    start_date, end_date, start_year, end_year, holding_years,
+    canada_cagr, sp500_cagr, tsx_cagr, vancouver_cagr, calgary_cagr,
+    edmonton_cagr, toronto_cagr, ottawa_cagr, montreal_cagr
+)
+SELECT 
+    canada.start_date AS start_date, 
+    canada.end_date AS end_date,
+    canada.start_year AS start_year,
+    canada.end_year AS end_year,
+    canada.holding_years AS holding_years,
+    canada.cagr AS canada_cagr,
+    sp500.cagr AS  sp500_cagr,
+    tsx.cagr AS  tsx_cagr,
+    city.vancouver_cagr AS vancouver_cagr,
+    city.calgary_cagr AS calgary_cagr,
+    city.edmonton_cagr AS edmonton_cagr,
+    city.toronto_cagr AS toronto_cagr,
+    city.ottawa_cagr AS ottawa_cagr,
+    city.montreal_cagr AS montreal_cagr
+
+FROM analysis.canada_house_cagr AS canada
+
+lEFT JOIN analysis.sp500_cagr AS sp500
+    ON canada.start_year=sp500.start_year
+    AND canada.holding_years=sp500.holding_years
+
+LEFT JOIN analysis.tsx_cagr AS tsx
+    ON canada.start_year  =tsx.start_year
+    AND canada.holding_years =tsx.holding_years
+
+LEFT JOIN analysis.city_house_cagr AS city
+    ON canada.start_year  =city.start_year
+    AND canada.holding_years =city.holding_years;

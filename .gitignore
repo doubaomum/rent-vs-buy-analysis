@@ -1,2 +1,6 @@
 .DS_Store
 data/processed/final/*-new.csv
+
+API.env
+__pycache__/
+*.py[cod]
