@@ -25,6 +25,7 @@ from zipfile import ZipFile
 
 import truststore
 from openpyxl import load_workbook
+from reconciliation import new_report, check_classification, check_changed_count, save_report
 
 PAGE_URL = "https://www.crea.ca/housing-market-stats/mls-home-price-index/hpi-tool/"
 WORKBOOK_NAME = "Seasonally Adjusted (M).xlsx"
@@ -147,7 +148,12 @@ def parse_workbook(body):
     return records, ranges, missing_count, undated_count
 
 
-def sync_database(records, ranges):
+def numeric_record(values):
+    """Normalize source and RAW numbers without rounding or losing NULLs."""
+    return tuple(as_number(v) for v in values)
+
+
+def sync_database(records, ranges, report):
     import psycopg
     from psycopg import sql
     from dotenv import load_dotenv
@@ -160,15 +166,17 @@ def sync_database(records, ranges):
     with psycopg.connect(host="localhost", port=5432, dbname="rentvsbuy",
                          user="postgres", password=password, connect_timeout=10) as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT city, month_date FROM raw.city_house_real_prices;")
-            stored, existing_ranges = {}, {}
-            for city, label in cur.fetchall():
+            cur.execute(sql.SQL("SELECT city, month_date, {} FROM raw.city_house_real_prices;")
+                        .format(sql.SQL(", ").join(map(sql.Identifier, VALUE_COLUMNS))))
+            stored, existing_ranges, old_values = {}, {}, {}
+            for city, label, *values in cur.fetchall():
                 if city not in CITY_SHEETS or label is None or not str(label).strip():
                     continue
                 period = as_period(label)
                 if (city, period) in stored:
                     raise ValueError(f"Duplicate dated raw rows: {city}, {period}.")
                 stored[(city, period)] = label
+                old_values[(city, period)] = numeric_record(values)
                 existing_ranges.setdefault(city, []).append(period)
             for city, periods in existing_ranges.items():
                 if ranges[city][0] > min(periods) or ranges[city][1] < max(periods):
@@ -200,8 +208,23 @@ def sync_database(records, ranges):
             )
             incoming = [(city, stored.get((city, period), period.isoformat())) + values
                         for (city, period), values in sorted(records.items())]
+            inserted = updated = unchanged = 0
+            for (city, period), values in sorted(records.items()):
+                prior = old_values.get((city, period))
+                current = numeric_record(values)
+                if prior is None:
+                    inserted += 1
+                elif prior != current:
+                    updated += 1
+                else:
+                    unchanged += 1
+            check_classification(len(records), inserted, updated, unchanged)
+            report["checks"]["classification"] = "PASS"
+            report["planned_raw_changes"] = dict(inserted=inserted, updated=updated, unchanged=unchanged)
             cur.executemany(query, incoming)
             raw_changed = cur.rowcount
+            check_changed_count(raw_changed, inserted, updated)
+            report["checks"]["raw_change_count"] = "PASS"
             cur.execute("""
                 SELECT COUNT(*), COUNT(*) FILTER (
                     WHERE NULLIF(BTRIM(month_date), '') IS NOT NULL),
@@ -246,7 +269,67 @@ def sync_database(records, ranges):
                             .format(stage_table))
                 total, latest = cur.fetchone()
                 stats.append((table, changed, total, latest))
+
+                # Verify each RAW month/region pivot against its STAGING table.
+                # Existing staging-only historical rows are intentionally untouched.
+                cur.execute(sql.SQL("""
+                    WITH expected AS (
+                        SELECT BTRIM(month_date)::date AS period, {pivot}
+                        FROM raw.city_house_real_prices
+                        WHERE NULLIF(BTRIM(month_date), '') IS NOT NULL
+                          AND city = ANY(%s)
+                        GROUP BY BTRIM(month_date)::date
+                    )
+                    SELECT COUNT(*) FROM expected e
+                    LEFT JOIN {table} s ON s.date_period = e.period
+                    WHERE s.date_period IS NULL
+                       OR ({actual}) IS DISTINCT FROM ({expected_cols});
+                """).format(
+                    pivot=sql.SQL(", ").join(sql.SQL("MAX(CASE WHEN city = {} THEN {} END) AS {}")
+                        .format(sql.Literal(city), sql.Identifier(source_column), sql.Identifier(col))
+                        for city, col in zip(CITY_SHEETS, stage_columns)),
+                    table=stage_table,
+                    actual=sql.SQL(", ").join(sql.SQL("s.{}").format(sql.Identifier(c)) for c in stage_columns),
+                    expected_cols=sql.SQL(", ").join(sql.SQL("e.{}").format(sql.Identifier(c)) for c in stage_columns),
+                ), (list(CITY_SHEETS),))
+                mismatches = cur.fetchone()[0]
+                if mismatches:
+                    raise ValueError(f"RAW/STAGING reconciliation failed for {table}: {mismatches} mismatches")
+                report["checks"][f"raw_{table}"] = "PASS"
+                print(f"RAW/STAGING {table} reconciliation: PASS")
+
+            # Compare all 12 source fields and keys against RAW after the UPSERT.
+            cur.execute(sql.SQL("SELECT city, month_date, {} FROM raw.city_house_real_prices")
+                        .format(sql.SQL(", ").join(map(sql.Identifier, VALUE_COLUMNS))))
+            post_values = {}
+            for city, label, *values in cur.fetchall():
+                if city not in CITY_SHEETS or label is None or not str(label).strip():
+                    continue
+                key = (city, as_period(label))
+                if key in post_values:
+                    raise ValueError(f"Duplicate RAW city-month during verification: {key}")
+                post_values[key] = numeric_record(values)
+            source_mismatches = sum(post_values.get(key) != numeric_record(values)
+                                    for key, values in records.items())
+            if source_mismatches:
+                raise ValueError(f"CREA/RAW reconciliation failed: {source_mismatches} mismatches")
+            report["checks"]["source_raw"] = "PASS"
+            print(f"CREA/RAW reconciliation: PASS ({len(records)} city-months verified)")
     # All three tables commit together before reporting success.
+    report["transaction_committed"] = True
+    report["committed_raw_changes"] = dict(report["planned_raw_changes"])
+    report["status"] = "PASS"
+    report["database"] = {
+        "raw_changed_rows": raw_changed, "raw_total_rows": raw_total,
+        "raw_dated_rows": raw_dated, "raw_latest_date": raw_latest.isoformat() if raw_latest else None,
+        "staging": {table: {"changed_rows": changed, "total_rows": total,
+                           "latest_date": latest.isoformat() if latest else None}
+                    for table, changed, total, latest in stats},
+    }
+    print(f"Inserted records: {inserted}")
+    print(f"Updated records: {updated}")
+    print(f"Unchanged records: {unchanged}")
+    print("RAW classification check: PASS")
     print("CREA city house prices update committed successfully.")
     print(f"Raw rows inserted or updated: {raw_changed}")
     print(f"Raw total rows (including existing undated rows): {raw_total}")
@@ -279,7 +362,36 @@ def main():
     if args.check_only:
         print("Source validation passed; the database was not accessed.")
         return
-    sync_database(records, ranges)
+    report = new_report(
+        source="CREA", dataset="Seasonally Adjusted Monthly MLS HPI",
+        checks=("classification", "raw_change_count", "source_raw",
+                "raw_city_house_prices", "raw_city_indexed_house_prices"),
+    )
+    report["records"].update(received=len(records), valid=len(records),
+                             missing_skipped=0, rejected=0)
+    report["missing_numeric_cells_retained_as_null"] = missing
+    report["empty_undated_source_rows_skipped"] = undated
+    report["source_period_start"] = min(r[0] for r in ranges.values()).isoformat()
+    report["source_period_end"] = max(r[1] for r in ranges.values()).isoformat()
+    report["reconciliation_scope"] = (
+        "CREA city-month source values -> RAW 12 numeric columns; "
+        "RAW dated known-city values -> price and HPI pivot staging tables. "
+        "Existing undated RAW rows and staging-only legacy rows remain untouched."
+    )
+    try:
+        sync_database(records, ranges, report)
+    except Exception as error:
+        report["error_type"] = type(error).__name__
+        raise
+    finally:
+        try:
+            path = save_report(report, "city_house_prices",
+                               Path(__file__).resolve().parent.parent / "reconciliation_reports")
+            print(f"Reconciliation report: {path}")
+        except OSError as error:
+            print(f"Failed to save reconciliation report: {type(error).__name__}", file=sys.stderr)
+            if report["status"] == "PASS":
+                raise
 
 
 if __name__ == "__main__":

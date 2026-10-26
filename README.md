@@ -1,363 +1,347 @@
-# Rent-Invest vs Buy in Canada
+# Rent vs. Buy in Canada
 
-**A historical scenario-analysis framework built on PostgreSQL, Python, and Power BI.**
+**Two choices. One starting budget. Thirty years of market data.**
 
-This project evaluates the financial trade-off between buying a home and renting while investing using two connected historical analyses: a long-run asset comparison from 1990–2025 and a household-level simulation across six Canadian cities and a national benchmark from 2005–2025.
+Should you buy a home? Or rent and invest the difference?
 
-Most rent-versus-buy comparisons set rent against a mortgage payment. That framing is wrong in both directions: it treats mortgage principal as a cost when it is savings, and it treats the renter's capital as if it vanishes. This model instead simulates two complete household balance sheets, month by month, starting from identical capital.
+A mortgage payment alone cannot answer that question. Part of it builds equity. And a renter can invest the cash that a buyer puts into a home.
 
-> **Core question:** Under historical Canadian market conditions, when did buying outperform renting-and-investing — and which assumptions changed the answer?
+This project compares **two household balance sheets**, month by month. Both start with the same capital. One buys a home. The other rents and invests. Historical Canadian data drives both paths.
 
----
+The project uses **PostgreSQL, Python, and Power BI**. It covers six cities and a Canada-wide benchmark. The published report focuses on historical results through 2025; the data pipelines can refresh later observations.
 
-## Power BI Report Preview
+> **The question:** When did buying win? When did renting and investing win? What changed the result?
 
-The Power BI dashboard supports interactive scenario exploration across **city, purchase year, holding period, mortgage-rate scenario, and renter portfolio**. Selected report pages are shown below.
+## See the work
 
-|                                                                        |                                                                     |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| ![Long-run housing vs equity markets](docs/img/01-longrun-markets.png) | ![Regional housing performance](docs/img/02-regional-housing.png)   |
-| ![Owner vs renter net worth paths](docs/img/03-networth-paths.png)     | ![Outcome sensitivity ranking](docs/img/04-sensitivity.png)         |
+| | |
+|---|---|
+| ![Power BI report screenshot 1](power%20bi/image/image-1.png) | ![Power BI report screenshot 2](power%20bi/image/image-2.png) |
+| ![Power BI report screenshot 3](power%20bi/image/image-3.png) | ![Power BI report screenshot 4](power%20bi/image/image-4.png) |
 
-Additional report pages are included in the PDF export below.
+**[Power BI report (PDF)](power%20bi/power%20bi%20report.pdf)** · **[Video demo](power%20bi/Video%20Demo.mp4)** · **[Key findings](docs/key_findings.md)**
 
-### Report and Demo
+The `.pbix` file is about 765 MB. It exceeds GitHub's standard 100 MB file limit, so this repository provides a PDF and a video instead.
 
-- **[View the Power BI report PDF](power%20bi/power%20bi%20report.pdf)** — static export of the final report.
-- **[Watch the video demo](power%20bi/Video%20Demo.mp4)** — walkthrough of slicers, filtering, and dynamic scenario interactions.
+## The rules of the comparison
 
-> **Power BI source file:** The final `.pbix` file is approximately **765 MB** and is therefore not stored in this repository because it exceeds GitHub's standard **100 MB per-file limit**. The PDF report and video demo are provided so the report design, results, and interactive workflow can still be reviewed directly from the repository.
+- **Start equal.** The renter invests the buyer's down payment and purchase costs. In the reported 20%-down scenarios, that is 22% of the home price.
+- **Count every cash flow.** When owning costs more in a month, the renter invests the difference. When renting costs more, the renter draws from the portfolio.
+- **Treat principal as equity.** Mortgage principal is cash paid, but not an unrecoverable cost.
+- **Account for selling.** Owner net worth includes an estimated 6% selling cost.
+- **Test two portfolios.** The renter invests in either the S&P 500 or the TSX.
+- **Use local rent rules.** Rent growth, moving costs, and move probabilities vary by city. A fixed random seed keeps the simulated moves reproducible.
 
----
+## What the historical data showed
 
-## What This Model Does Differently
+### Long-run returns, 1990–2025
 
-**Equal starting capital.** The renter begins with exactly the capital the owner committed to the property — down payment plus purchase cost, a constant 22% of purchase price under the reported assumptions.
+| Asset | Real CAGR |
+|---|---:|
+| S&P 500 in CAD | **7.1%** |
+| S&P/TSX Composite | **3.9%** |
+| Canadian housing | **2.0%** |
 
-**Symmetric cash-flow treatment.** Monthly cash-flow differences are explicitly transferred to or withdrawn from the renter portfolio. When owning requires more cash, the renter invests the difference; when renting requires more cash, the renter withdraws the shortfall. This creates a consistent monthly resource-allocation framework without treating renter savings as free consumption.
+### Regional comparison, 2005–2025
 
-**Principal is not a cost.** Mortgage principal appears in owner cash outflow, because it must be funded each month, but is excluded from unrecoverable cost, because it converts to equity.
+| Market or asset | Real CAGR |
+|---|---:|
+| S&P 500 | **7.22%** |
+| Vancouver housing | **4.14%** |
+| TSX | **3.84%** |
+| Montreal housing | 3.34% |
+| Toronto housing | 3.17% |
+| Canada housing | 2.87% |
+| Ottawa housing | 2.59% |
+| Calgary housing | 2.48% |
+| Edmonton housing | 2.14% |
 
-**Liquidation-equivalent wealth.** Owner net worth subtracts an estimated 6% sale cost at every point, making it directly comparable to a portfolio balance.
+Vancouver led the six housing markets. It was the only one to beat the TSX in this comparison. None beat the S&P 500.
 
-**Portfolio choice is a variable, not an assumption.** The renter's alternative is modelled as TSX-only or S&P 500-only, revealing that portfolio selection can outweigh the buy-versus-rent decision itself.
+### One household, two outcomes
 
-**City-specific renter behaviour.** Rent control, move probability, and moving costs vary by market, with moves generated from a fixed seed so results are reproducible and comparable across portfolio variants.
+**Canada benchmark · Buy in 2005 · Hold 20 years · 20% down · Base mortgage rate · Renter invests in TSX**
 
----
+| Measure | Owner | Renter-investor |
+|---|---:|---:|
+| Average monthly cash outflow | $1,520 | $903 |
+| Cash-outflow CAGR | 1.66% | 3.21% |
+| **Final real net worth** | **$372.7K** | **$441.7K** |
 
-## Headline Findings
+**The renter ended about $69K ahead.** Yet the owner led for much of the middle of the period.
 
-### Long-run asset performance, 1990–2025
+This result uses the **national benchmark**, not a real city. In the six individual markets, the owner won under the same scenario settings. Final owner-to-renter net-worth ratios were Vancouver 2.72, Montreal 1.19, Edmonton 1.18, Calgary 1.05, Ottawa 1.03, and Toronto 1.01. National average prices and rents do not describe any one local market.
 
-| Asset                 | Real CAGR |
-| --------------------- | ---------:|
-| **S&P 500 (CAD)**     | **7.1%**  |
-| **S&P/TSX Composite** | **3.9%**  |
-| **Canada Housing**    | **2.0%**  |
+### What changed the result
 
-### Regional housing, 2005–2025
+**Portfolio choice mattered more over time.** At five years, switching portfolios and adding two percentage points to the mortgage rate had similar effects. By fifteen years, the portfolio effect was 2.2–4.8 times the rate effect across the tested markets. In one 20-year Calgary case, the ranges were about $352K and $82K.
 
-| Market      | Real CAGR |     | Market         | Real CAGR |
-| ----------- | ---------:| --- | -------------- | ---------:|
-| **S&P 500** | **7.22%** |     | Canada Housing | 2.87%     |
-| Vancouver   | 4.14%     |     | Ottawa         | 2.59%     |
-| **TSX**     | **3.84%** |     | Calgary        | 2.48%     |
-| Montreal    | 3.34%     |     | Edmonton       | 2.14%     |
-| Toronto     | 3.17%     |     |                |           |
+**Mortgage rates changed the renter's investment path.** In the Calgary 2005 / 20-year / TSX example, a two-point rate increase cut owner net worth by about $6K. It raised renter net worth by about $76K. The higher owner payment meant more money for the renter to invest.
 
-Vancouver was the strongest Canadian housing market and the only city to beat the TSX. No city matched U.S. equities.
+**High home prices did not always mean high holding costs.** In the reported Vancouver scenario, owner cash outflow averaged 0.83 times renter cash outflow. The model's low property-tax and structure-value assumptions helped produce that result.
 
-### An illustrative household scenario
+**Timing mattered most over short holds.** A five-year outcome could shift from a strong owner win to a six-figure loss just by changing the purchase year.
 
-Canada-wide benchmark · purchased 2005 · 20-year hold · 20% down · Base rates · **TSX portfolio**
+> **Historical-report caveat:** The reported 20-year comparison uses the original 2025 simulation horizon. Some 2006-entry scenarios were truncated before their planned sale. Those results were flagged as provisional in the original analysis. The refreshable database now covers later observations, but the figures above have not been represented as newly recalculated results.
 
-| Measure                      | Owner       | Renter-Investor |
-| ---------------------------- | -----------:| ---------------:|
-| Average monthly cash outflow | $1,520      | $903            |
-| Cash-outflow CAGR            | 1.66%       | 3.21%           |
-| **Final real net worth**     | **$372.7K** | **$441.7K**     |
+Read the full evidence in **[Key Findings](docs/key_findings.md)**.
 
-The renter finished about **$69K ahead** — despite the owner leading for most of the middle of the period, and despite the renter holding the weaker of the two portfolios.
-
-> **This is the national benchmark series, not a city.** Across the six individual markets under the same assumptions, the owner finished ahead in every case: Vancouver 2.72, Montreal 1.19, Edmonton 1.18, Calgary 1.05, Ottawa 1.03, Toronto 1.01 (owner ÷ renter final real net worth). The national series pairs national average prices with national average rents, so its cash-flow position does not describe any single market. Market-by-market results are in the key findings.
-
-### What actually moves the result
-
-**Portfolio choice and mortgage rates are equivalent at short horizons, then diverge.** At five years the TSX-versus-S&P 500 net-worth range and the Base-versus-Base+2pp range are nearly equal in every market tested — a ratio between **0.9× and 1.2× across all seven series**. By fifteen years the ratio reaches 2.2× to 4.8×. Because both drivers range over exactly two tested values at every horizon, this is the comparison least affected by the shrinking-cohort issue that limits purchase-timing comparisons. In one Calgary scenario the 20-year figures were about $352K for portfolio against $82K for mortgage rate.
-
-**Mortgage rates primarily transmit through cash flow in the illustrated long-horizon scenario.** In the Calgary 2005 / 20-year / TSX case, moving from Base to Base +2pp reduced owner final real net worth by about $6K while increasing renter final real net worth by about $76K. Higher mortgage payments increased the owner-renter monthly cash-flow difference, creating additional investment contributions for the renter.
-
-**Expensive housing does not mean expensive to hold.** Vancouver was the only market where the owner's average monthly outflow was *lower* than the renter's (0.83×), and it produced the strongest owner result. It has the lowest residential property-tax rate of any major Canadian city, and land makes up an unusually large share of property value there, so the structure subject to maintenance is proportionally smaller. Lighter carrying costs narrow the monthly gap that funds the renter's portfolio — which is also why Vancouver shows the weakest portfolio sensitivity of any market tested.
-
-**Entry timing dominates short horizons.** For five-year holds, outcomes in a single city swung from a large owner advantage to a six-figure owner shortfall depending only on purchase year.
-
-> **Note on 20-year figures:** Housing data extends to March 2026 while the simulation horizon ends December 2025, so a small number of 2006-entry cohorts are truncated before reaching their sale month. Twenty-year figures are provisional pending exclusion of those scenarios at generation.
-
-Full results and interpretation: [`docs/key_findings.md`](docs/key_findings.md)
-
----
-
-## Architecture
+## How the system works
 
 ```text
-Source CSVs
-     ↓
-raw schema          →  imported with minimal transformation, validated
-     ↓
-stg schema          →  typed, standardized, validated
-     ↓
-analysis schema     →  real indexes, CAGR, long-format inputs
-     ↓
-simulation schema   →  scenario generation, monthly schedules
-     ↓
-Python engines      →  mortgage amortization, rent paths, portfolio compounding
-     ↓
-Power BI            →  filtering, DAX measures, sensitivity analysis
+FRED · Statistics Canada · Yahoo Finance · CMHC · CREA · BIS · Teranet
+                              |
+                              v
+                         PostgreSQL RAW
+                              |
+                    clean and reconcile
+                              v
+                       PostgreSQL STAGING
+                              |
+                   transform and validate
+                              v
+                      PostgreSQL ANALYSIS
+                              |
+                       build scenarios
+                              v
+                  OWNER / RENTER SIMULATION
+                  SQL inputs + Python engines
+                              |
+                              v
+                            Power BI
 ```
 
-| Tool           | Role                                                                                                      |
-| -------------- | --------------------------------------------------------------------------------------------------------- |
-| **PostgreSQL** | Storage, cleaning, transformation, validation, scenario generation, monthly schedules                     |
-| **Python**     | State-dependent monthly calculations: amortization, renewals, rent paths, mobility, portfolio compounding |
-| **Power BI**   | Interactive filtering, DAX measures, sensitivity visualization                                            |
+**PostgreSQL** stores records, prepares inputs, and builds scenarios. **Python** calculates monthly paths that depend on prior months. **Power BI** presents the results; it does not recalculate the financial model.
 
-The split follows a simple rule: **PostgreSQL handles storage, transformations, scenario construction, and values that can be determined from the current row or period; Python handles state-dependent monthly calculations that rely on prior-period results.** Power BI does not reimplement the model — it consumes finished outputs.
+### Repository structure
 
----
-
-## Repository Structure
+The repository separates SQL, Python calculations, tests, and documentation.
 
 ```text
-sql/
-  01_create_raw_tables.SQL              schema + raw table definitions
-  02_load_raw_data.sql                  \copy loads, per-city consolidation
-  02_check_raw_data.SQL                 raw-layer validation
-  03_01_create_staging_tables.SQL       typing, date parsing, pivoting
-  03_02_check_staging_data.sql          staging validation
-  04_analysis1_create_real_asset_indexes.sql
-  04_analysis1_check_real_asset_indexes.sql
-  04_analysis2_create_asset_cagr.sql
-  04_analysis2_check_asset_cagr.sql
-  05_create_owner_simulation_table.sql  owner scenarios + monthly schedule
-  06_create_renter_simulation_table.sql renter scenarios + monthly schedule
-
-python/
-  05_calculate_owner_schedule.py        mortgage amortization engine
-  06_calculate_renter_schedule.py       rent, mobility, portfolio engine
-
-docs/
-  data_source.md
-  Data_Cleaning_Transformation_and_Preparation.md
-  simulation_methodology.md
-  key_findings.md
-
-power bi/
-  power bi report.pdf                     static export of the final Power BI report
-  Video Demo.mp4                          walkthrough of interactive report behaviour
+rent-vs-buy-analysis/
+├── .gitignore
+├── README.md
+├── requirements.txt
+├── rent-vs-buy-interactive-presentation.html
+├── rent-vs-buy-presentation.html
+├── docs/
+│   ├── data_cleaning.md
+│   ├── DATA_RECONCILIATION.md
+│   ├── data_source.md
+│   ├── data_update.md
+│   ├── key_findings.md
+│   ├── simulation_methodology.md
+│   └── validation - testing.md
+├── power bi/
+│   ├── power bi report.pdf
+│   ├── Video Demo.mp4
+│   └── image/                  # Report screenshots
+└── SQL-Python/
+    ├── check_SQL/
+    │   ├── 1. raw_schema_checks.sql
+    │   ├── 2. staging_schema_checks.sql
+    │   ├── 3. analysis_schema_checks.sql
+    │   └── 4. simulation_checks.sql
+    ├── create_SQL/
+    │   ├── 01_create_raw_tables.SQL
+    │   ├── 02_load_raw_data.sql
+    │   ├── 03_create_staging_tables.SQL
+    │   ├── 04_analysis_refresh_asset_cagr.sql
+    │   ├── 04_analysis_refresh_long_tables.sql
+    │   ├── 04_analysis_refresh_real_asset_indexes.sql
+    │   ├── 05_refresh_owner_months.sql
+    │   ├── 05_refresh_owner_scenarios.sql
+    │   ├── 06_prepare_renter_refresh.sql
+    │   └── 06_refresh_renter_months.sql
+    ├── update_python/
+    │   ├── reconciliation.py
+    │   ├── update_fred.py
+    │   ├── update_cpi.py
+    │   ├── update_sp500.py
+    │   ├── update_tsx.py
+    │   ├── update_mortgage.py
+    │   ├── update_rent.py
+    │   ├── update_city_house_prices.py
+    │   ├── update_bis_house_index.py
+    │   ├── update_city_house_index.py
+    │   ├── update_analysis.py
+    │   ├── update_owner.py
+    │   └── update_renter.py
+    ├── simulation_python/
+    │   ├── owner_calculations.py
+    │   └── renter_calculations.py
+    ├── test_rollback_python/
+    │   └── test_fred_rollback.py
+    └── reconciliation_reports/ # JSON audit reports from local runs
 ```
 
----
+`API.env` is kept locally under `SQL-Python/update_python/`. It holds credentials. **Never commit it.** Python `__pycache__` folders are generated files, not project source.
 
-## Reproducing the Analysis
+The two HTML presentations sit at the repository root. The PDF, video, and screenshots sit under `power bi/`.
 
-**Requirements:** PostgreSQL 14+, Python 3.10+, and `pandas`, `numpy`, `sqlalchemy`, `psycopg2-binary`.
+## Data refresh and reconciliation
 
-**1 — Create the database**
+Each source follows a simple rule:
 
-```bash
-createdb rentvsbuy
-export POSTGRES_PASSWORD=your_password
-```
+**Refresh → Reconcile → Record changes → Investigate surprises → Rerun.**
 
-On Windows PowerShell:
+The scripts compare incoming data with RAW, then check RAW against STAGING. They count inserts, updates, and unchanged records. They save JSON reports. A failed check stops the transaction before commit.
+
+Nine source pipelines have passed local reconciliation runs:
+
+| Source | Pipeline |
+|---|---|
+| FRED | USD/CAD exchange rate |
+| Statistics Canada | CPI |
+| Yahoo Finance | S&P 500 |
+| Yahoo Finance | TSX |
+| Statistics Canada | Five-year mortgage rate |
+| CMHC | City rents |
+| CREA | City benchmark prices and HPI |
+| BIS | Real Canadian house-price index |
+| Teranet | C11 house-price index |
+
+The **Analysis** refresh also passed its key, completeness, and staging checks. The **Owner** simulation reconciled **27,972 scenarios and 3,089,772 monthly rows**. The **Renter** script also writes an audit report. The repository tree shows a local Renter JSON report, but that report's PASS status is not independently verified in this README.
+
+These passes show that the checked outputs matched their sources or calculated records in the runs tested. They do not prove that every possible historical revision, new insert, or financial formula has been independently tested.
+
+### TSX: a bug the audit trail caught
+
+The TSX refresh kept marking **10 old months** as updated. The values seemed unchanged. The change log told a different story: `adj_close_price` was shifting by tiny fractions.
+
+We compared old and new values. The differences pointed to floating-point precision. We set a **0.001 absolute comparison tolerance for adjusted close**, while keeping exact checks for other fields and NULL transitions. Then we ran the refresh twice.
+
+**Both runs: 441 unchanged. Zero updates. Zero false change-log entries.**
+
+That fix makes repeated refreshes stable under the chosen rule. It also means sub-0.001 changes in that field will not trigger an update. The threshold is a documented trade-off, not proof that the source can never revise a smaller amount.
+
+For the full process, see **[Data Reconciliation](docs/DATA_RECONCILIATION.md)**.
+
+## Run the refresh workflow
+
+Install Python packages from [`requirements.txt`](requirements.txt). Configure PostgreSQL and create the tables first. Keep your `API.env` in `SQL-Python/update_python/` on your own machine.
+
+From the repository root, change to `SQL-Python`:
 
 ```powershell
-$env:POSTGRES_PASSWORD="your_password"
+cd SQL-Python
 ```
 
-**2 — Place source data**
+**1 — Refresh external data.** Each script checks its source, RAW, and STAGING results. Run the sources you need; these are the nine current ingestion scripts.
 
-Download the files listed under [Data Sources](#data-sources) into `data/raw/`, following the subfolder layout referenced in `02_load_raw_data.sql`. The `\copy` paths in that script are absolute and will need to be adjusted for your machine.
-
-**3 — Build the database**
-
-Run in order; the check scripts are optional but recommended between stages.
-
-```bash
-psql -d rentvsbuy -f sql/00_create_schemas.sql
-psql -d rentvsbuy -f sql/01_create_raw_tables.SQL
-psql -d rentvsbuy -f sql/02_load_raw_data.sql
-psql -d rentvsbuy -f sql/02_check_raw_data.SQL
-psql -d rentvsbuy -f sql/03_01_create_staging_tables.SQL
-psql -d rentvsbuy -f sql/03_02_check_staging_data.sql
-psql -d rentvsbuy -f sql/04_analysis1_create_real_asset_indexes.sql
-psql -d rentvsbuy -f sql/04_analysis2_create_asset_cagr.sql
+```powershell
+python3 .\update_python\update_fred.py
+python3 .\update_python\update_cpi.py
+python3 .\update_python\update_sp500.py
+python3 .\update_python\update_tsx.py
+python3 .\update_python\update_mortgage.py
+python3 .\update_python\update_rent.py
+python3 .\update_python\update_city_house_prices.py
+python3 .\update_python\update_bis_house_index.py
+python3 .\update_python\update_city_house_index.py
 ```
 
-**4 — Run the simulation**
+**2 — Refresh analysis.** The runner executes the three `04_analysis_refresh_*.sql` scripts in order.
 
-```bash
-psql -d rentvsbuy -f sql/05_create_owner_simulation_table.sql
-python  python/05_calculate_owner_schedule.py
-psql -d rentvsbuy -f sql/06_create_renter_simulation_table.sql
-python  python/06_calculate_renter_schedule.py
+```powershell
+python3 .\update_python\update_analysis.py
 ```
 
-The owner engine writes to a temporary table and updates the permanent schedule in a single transaction. The renter engine processes 500 owner scenarios per batch to bound memory.
+**3 — Refresh simulations.** Owner runs first. Renter uses its saved results.
 
-**5 — Review the Power BI report**
+```powershell
+python3 .\update_python\update_owner.py
+python3 .\update_python\update_renter.py
+```
 
-The repository includes a [PDF export](power%20bi/power%20bi%20report.pdf) and a [video demo](power%20bi/Video%20Demo.mp4) of the final Power BI report. The `.pbix` source file is not included because its approximately 765 MB size exceeds GitHub's standard per-file limit.
+**4 — Review the checks.** SQL checks live under `SQL-Python/check_SQL/`. JSON run reports go to `SQL-Python/reconciliation_reports/`. The isolated FRED rollback test is:
 
-> **Note on re-runs:** `renter_monthly_schedule` holds a foreign key to `owner_monthly_schedule`, so re-running step 4 requires dropping the renter table first, or changing the owner drop to `DROP TABLE ... CASCADE`.
+```powershell
+python3 .\test_rollback_python\test_fred_rollback.py
+```
 
----
+These are refresh commands for an **existing database**. They are not a clean-install script. Some data sources require their own Python packages or a local source file. Read each script's header for those options.
 
-## The Model at a Glance
+**Order matters.** Refresh the relevant sources before analysis. Refresh Owner before Renter. Then update Power BI. A successful reconciliation confirms the checks performed in that run, not every financial assumption.
 
-Full specification: [`docs/simulation_methodology.md`](docs/simulation_methodology.md)
+## Model scope and assumptions
 
-### Reporting scope
+| Item | Assumption |
+|---|---|
+| Locations | Vancouver, Calgary, Edmonton, Toronto, Ottawa, Montreal; Canada benchmark |
+| Reported holding periods | 5 / 10 / 15 / 20 years |
+| Mortgage-rate cases | Base, Base −2 percentage points, Base +2 percentage points |
+| Renter portfolios | TSX-only or S&P 500-only |
+| Reported down payment | 20% |
+| Renter investment discipline | 100% |
+| Mortgage term / amortization | 5 / 25 years |
+| Purchase / selling costs | 2% / 6% |
+| Annual maintenance | 1.5% of estimated structure value |
+| Annual insurance | 0.3% of home value |
+| Property tax | 0.30%–1.20%, city-specific |
+| Structure share | 0.35–0.60, city-specific |
+| Annual investment fee | 0.10% |
+| Tax drag | 0.10% TSX; 0.25% S&P 500 |
 
-| Dimension             | Values                                                          |
-| --------------------- | --------------------------------------------------------------- |
-| City                  | Vancouver, Calgary, Edmonton, Toronto, Ottawa, Montreal, plus a national benchmark |
-| Purchase year         | Every year with a completed scenario at the given holding period |
-| Holding period        | 5 / 10 / 15 / 20 years                                          |
-| Mortgage rate         | Lower (−2pp) · Base · Higher (+2pp)                             |
-| Renter portfolio      | TSX-only · S&P 500-only                                         |
-| **Down payment**      | **Fixed at 20%**                                                |
-| **Renter discipline** | **Fixed at 100%**                                               |
+Other down-payment scenarios exist in the model. The published report holds down payment at 20% so changes in starting capital do not distort the comparison. Longer holds also have fewer eligible purchase years.
 
-The number of available purchase years falls as the holding period lengthens, since city-level price data begins in 2005 and the simulation horizon ends in December 2025 — roughly sixteen entry years at the 5-year horizon against one at 20 years. Sensitivity figures that range over purchase year are therefore not directly comparable across holding periods.
-
-Down payment is held constant because different levels require different starting capital, which would conflate the performance of a strategy with the size of its capital base. The 10% and 30% scenarios remain in the database for extension.
-
-The underlying PostgreSQL simulation engine contains a broader set of monthly purchase-date and down-payment scenarios than those exposed in the final report.
-
-### Core assumptions
-
-| Assumption                   | Value                                |
-| ---------------------------- | ------------------------------------ |
-| Mortgage term / amortization | 5 years / 25 years                   |
-| Purchase cost                | 2% of purchase price                 |
-| Sale cost                    | 6% of market value                   |
-| Maintenance                  | 1.5% of **structure value** per year |
-| Insurance                    | 0.3% of market value per year        |
-| Property tax                 | 0.30%–1.20%, city-specific           |
-| Structure ratio              | 0.35–0.60, city-specific             |
-| Investment fees              | 0.10% annually, both portfolios      |
-| Tax drag                     | 0.10% (TSX) · 0.25% (S&P 500)        |
-
-Maintenance is applied to the estimated structural portion of the property rather than total market value as a simplifying assumption intended to separate building-related upkeep from land value. The structure ratio varies sharply by market — Vancouver's 0.35 reflects the relatively large land-value component of total property value there.
-
-### Key formulas
+### Core calculations
 
 ```text
-Owner Net Worth  = House Market Value − Mortgage Balance − Estimated Sale Cost
-Renter Net Worth = Portfolio Value
+Owner net worth   = House value − Mortgage balance − Estimated selling cost
+Renter net worth  = Investment portfolio value
 
-Owner Cash Outflow  = Mortgage Payment + Maintenance + Property Tax + Insurance
-Renter Cash Outflow = Actual Rent + Moving Cost
-Savings Difference  = Owner Cash Outflow − Renter Cash Outflow
+Owner cash outflow  = Mortgage payment + Maintenance + Property tax + Insurance
+Renter cash outflow = Rent + Moving cost
+Monthly difference  = Owner cash outflow − Renter cash outflow
 
-Real Net Worth = Nominal Net Worth × Starting-Month CPI ÷ Current CPI
+Real net worth = Nominal net worth × Starting-month CPI / Current CPI
 ```
 
-The simulation runs entirely in nominal CAD and deflates only at the end, so no compounding loop mixes real and nominal quantities. Reported outcomes use `owner_net_worth_real` and `renter_net_worth_real`.
+The simulation compounds nominal CAD values. It adjusts wealth for inflation when reporting real results. Details are in **[Simulation Methodology](docs/simulation_methodology.md)**.
 
----
+## Data sources
 
-## Data Sources
+| Source | Data | Used for |
+|---|---|---|
+| BIS | Canada real house-price index, `Q.CA.R.628` | National asset comparison |
+| CREA | MLS Home Price Index and benchmark prices | City analysis and home values |
+| Teranet–National Bank | C11 house-price index | Reference series; not used downstream |
+| Yahoo Finance | `^GSPC`, `^GSPTSE`, `VT` | Market comparisons; S&P 500 and TSX renter portfolios |
+| FRED | `DEXCAUS` | USD-to-CAD conversion |
+| Statistics Canada | CPI, table 18-10-0004-01 | Inflation adjustment |
+| Statistics Canada | Five-year mortgage rate, table 34-10-0145-01 | Mortgage simulation |
+| CMHC | Rental Market Survey | City rents |
 
-| Data                          | Source                                                   | Use                                                                            |
-| ----------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Canada national housing index | BIS Residential Property Price Statistics (`Q.CA.R.628`) | Long-run national analysis. Published in real terms — no CPI deflation applied |
-| City HPI and benchmark prices | CREA MLS® Home Price Index                               | Regional analysis and dollar-denominated simulation                            |
-| Teranet–National Bank HPI     | housepriceindex.ca                                       | Loaded and staged for reference; not used downstream                           |
-| S&P 500                       | Yahoo Finance `^GSPC`, monthly                           | Market comparison and renter portfolio                                         |
-| S&P/TSX Composite             | Yahoo Finance `^GSPTSE`, monthly                         | Market comparison and renter portfolio                                         |
-| VT                            | Yahoo Finance `VT`, monthly                              | Retained for supporting analysis; not used as a final renter-portfolio option  |
-| USD/CAD                       | FRED `DEXCAUS`, daily                                    | Converting USD assets to CAD                                                   |
-| Consumer Price Index          | Statistics Canada 18-10-0004-01                          | Inflation adjustment                                                           |
-| 5-year mortgage rate          | Statistics Canada 34-10-0145-01                          | Mortgage simulation and sensitivity                                            |
-| City rents                    | CMHC Rental Market Survey (HMIP)                         | Renter cash-flow simulation                                                    |
+The BIS series is already a **real** house-price index. It is not deflated by CPI a second time. More detail: **[Data Sources](docs/data_source.md)**.
 
-Retrieval parameters, coverage windows, and source quirks: [`docs/data_source.md`](docs/data_source.md)
+## Limits
 
----
+- **This is history, not a forecast.** The model does not predict the next housing cycle.
+- **Dividends are not reinvested.** The equity series understate a total-return strategy and can favour buying.
+- **Mortgage rates are posted rates.** Actual negotiated rates may be lower. This can favour renting in the model.
+- **The cohorts are uneven.** Housing data starts in 2005 for the city simulations. Long holds have fewer eligible entry years.
+- **Housing and rent are market benchmarks.** They are not individual transactions or leases. Annual rent observations are applied across each calendar year.
+- **Behaviour is simplified.** Moving, rent control, maintenance, and investment discipline follow set assumptions.
+- **Other household assets are excluded.** The model compares a home-based balance sheet with an investment portfolio.
+- **Life matters beyond money.** Stability, flexibility, schools, and the freedom to change a home are not priced into the results.
 
-## Validation
-
-Checks run at every stage rather than at the end:
-
-| Stage          | Checks                                                                                                                          |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Raw            | Row counts, date ranges, city coverage, duplicate city-date pairs                                                               |
-| Staging        | Row counts, date ranges, duplicate dates, type-cast failures                                                                    |
-| Scenario       | Every scenario starts at month 0; month count matches holding period; owner and renter identifiers align                        |
-| Mortgage       | No negative balances; resets at renewal months; principal never exceeds balance; balance reaches zero at full amortization      |
-| Renter         | No missing rent or CPI; month 0 has no move and no contribution; portfolio never negative; controlled rent never exceeds market |
-| Cross-scenario | Higher rates raise financing costs; portfolios diverge; outcomes reconcile with underlying monthly paths                        |
-
-Making these explicit scripts rather than ad-hoc review means they can be re-run after any source refresh.
-
----
-
-## Directional Effects of Modelling Choices
-
-Three choices measurably tilt the comparison, and they do **not** all point the same way:
-
-| Choice                                                   | Direction                                                   |
-| -------------------------------------------------------- | ----------------------------------------------------------- |
-| Equity series exclude reinvested dividends               | Understates renter portfolio growth → **favours the owner** |
-| Mortgage rates are posted, not discounted                | Overstates owner financing cost → **favours the renter**    |
-| Illustrative scenarios use the TSX, the weaker portfolio | Understates the renter outcome → **favours the owner**      |
-
-Because these effects operate in different directions, the model should not be interpreted as being uniformly conservative toward either strategy. Instead, they should be treated as directional modeling limitations when interpreting individual scenarios.
-
----
-
-## Limitations
-
-**Historical analysis, not forecasting.** The model shows how buying and renting would have performed under historical housing, equity, inflation, rent, and mortgage conditions. Past performance does not predict future results, and the ±2 percentage-point mortgage-rate scenarios should be interpreted as stress tests rather than forecasts.
-
-**Wealth is concentrated in one main asset on each side.** Owner wealth is mainly represented by home equity, while renter wealth is represented by the investment portfolio. As the mortgage balance declines over longer holding periods, owner outcomes become increasingly driven by house-price performance, while renter outcomes become increasingly driven by stock-market performance. The model therefore does not represent a complete household balance sheet with additional savings, investments, or other assets.
-
-**Equity returns exclude reinvested dividends.** The TSX and S&P 500 series are based on price movements rather than total returns. This understates long-term renter portfolio growth compared with a strategy that reinvests dividends and therefore tends to favour the owner in longer holding periods.
-
-**Historical coverage is uneven.** City-level housing data begins in 2005, so twenty-year holding periods are available only for the earliest purchase cohorts. Purchase year and holding period are therefore partly constrained by data availability, meaning longer-horizon results are based on fewer historical periods than shorter-horizon results.
-
-**Data granularity limits realism.** Rent observations are annual and applied across each calendar year, while benchmark housing prices represent typical market properties rather than individual transactions. The model therefore captures broad market conditions rather than property-specific or lease-specific experiences.
-
-**Behavioural assumptions are simplified.** Move probabilities, rent-control assumptions, moving costs, maintenance rates, and structure-value ratios are fixed within the model. They represent a standardized household rather than any individual household. The 100% investment-discipline assumption also represents a highly disciplined renter who consistently invests available savings, which strengthens renter outcomes compared with less consistent saving behaviour.
-
-**The comparison is financial only.** The model does not assign monetary value to lifestyle factors such as housing stability, flexibility to move, renovation freedom, school catchment, or the time and effort required to maintain a home. These factors can materially affect a real household’s rent-versus-buy decision even when they do not appear in net worth.
-
----
+These limits do not all favour the same choice. They matter when reading any single result.
 
 ## Documentation
 
-| Document                                                                           | Contents                                                       |
-| -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| [`docs/data_source.md`](docs/data_source.md)                                                                   | Source URLs, retrieval parameters, coverage, known data quirks |
-| [`docs/Data_Cleaning_Transformation_and_Preparation.md`](docs/Data_Cleaning_Transformation_and_Preparation.md) | Pipeline layers, transformations, validation                   |
-| [`docs/simulation_methodology.md`](docs/simulation_methodology.md)                                             | Full financial model specification                             |
-| [`docs/key_findings.md`](docs/key_findings.md)                                                                 | Results and interpretation                                     |
+- **[Data Sources](docs/data_source.md)** — source records, coverage, and retrieval rules.
+- **[Data Cleaning](docs/data_cleaning.md)** — cleaning rules and source preparation.
+- **[Data Update](docs/data_update.md)** — source refresh workflow.
+- **[Validation and Testing](docs/validation%20-%20testing.md)** — validation and testing notes.
+- **[Data Reconciliation](docs/DATA_RECONCILIATION.md)** — audit trail and TSX precision investigation.
+- **[Simulation Methodology](docs/simulation_methodology.md)** — assumptions, formulas, and scenario design.
+- **[Key Findings](docs/key_findings.md)** — results, sensitivity tests, and interpretation.
 
-Start with the methodology document for the model, or key findings for the results.
+## Tech stack
 
----
-
-## Tech Stack
-
-`PostgreSQL` · `SQL` · `Python` · `pandas` · `NumPy` · `SQLAlchemy` · `Power BI` · `DAX` · `Git`
+`PostgreSQL` · `SQL` · `Python` · `pandas` · `NumPy` · `psycopg` · `Power BI` · `DAX` · `Git`
 
 ---
 
-## Takeaway
-
-The project produces no universal answer, because the historical record does not contain one. The outcome depends on the interaction of city, purchase timing, holding period, financing conditions, and — most of all — what the renter does with the capital not spent on a house.
-
-The comparison that matters is not rent against a mortgage payment. It is one household balance sheet against another, under the same starting capital and the same monthly budget.
+**Buying is not always better. Renting is not always better. The answer depends on the market, the timing, and what each household does with its money.**

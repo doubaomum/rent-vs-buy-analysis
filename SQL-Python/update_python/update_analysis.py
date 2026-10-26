@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 import sys
 
+from reconciliation import new_report, save_report
+
 import psycopg
 from psycopg import sql
 from dotenv import load_dotenv
@@ -25,6 +27,8 @@ SOURCES = (
     "canada_house_price_index_2010_100", "sp500_usd", "tsx_cad", "vt_usd",
     "usd_cad", "canada_cpi", "city_indexed_house_prices", "city_house_prices", "city_rent",
 )
+REPORT_DIR = PROJECT_DIR / "reconciliation_reports"
+
 TABLE_KEYS = {
     "canada_house_price_index_1990_100": ("date_period",),
     "sp500_index_1990_100": ("date_period",),
@@ -118,30 +122,111 @@ def validate_results(cur):
     return summaries
 
 
+def table_snapshot(cur):
+    """Capture comparable counts, date bounds and missing/duplicate key totals."""
+    snapshot = {}
+    for table, keys in TABLE_KEYS.items():
+        target = sql.Identifier("analysis", table)
+        period = "end_date" if "holding_years" in keys else "date_period"
+        # Before refreshing, do not assume tables already have valid keys.
+        cur.execute(sql.SQL("SELECT COUNT(*), MIN({period}), MAX({period}) FROM {table}").format(
+            period=sql.Identifier(period), table=target))
+        count, earliest, latest = cur.fetchone()
+        snapshot[table] = {
+            "rows": count,
+            "earliest": earliest.isoformat() if earliest else None,
+            "latest": latest.isoformat() if latest else None,
+        }
+    return snapshot
+
+
+def source_snapshot(cur):
+    snapshot = {}
+    for table in SOURCES:
+        cur.execute(sql.SQL("SELECT COUNT(*), COUNT(date_period), MIN(date_period), "
+                            "MAX(date_period) FROM {}").format(sql.Identifier("stg", table)))
+        total, dated, earliest, latest = cur.fetchone()
+        snapshot[table] = {
+            "rows": total, "dated_rows": dated,
+            "earliest": earliest.isoformat() if earliest else None,
+            "latest": latest.isoformat() if latest else None,
+        }
+    return snapshot
+
+
 def main():
-    scripts = [(name, (SQL_DIR / name).read_text(encoding="utf-8-sig")) for name in SQL_FILES]
-    load_dotenv(HERE / "API.env")
-    password = os.getenv("pg_password", "")
-    if not password:
-        raise ValueError("Missing pg_password in API.env beside this script.")
-    with psycopg.connect(host="localhost", port=5432, dbname="rentvsbuy", user="postgres",
-                         password=password, connect_timeout=10) as conn:
-        conn.isolation_level = psycopg.IsolationLevel.REPEATABLE_READ
-        with conn.cursor() as cur:
-            cur.execute("SELECT pg_try_advisory_xact_lock(726562, 4)")
-            if not cur.fetchone()[0]:
-                raise ValueError("Another analysis refresh is already running.")
-            print("Checking staging inputs...", flush=True)
-            validate_sources(cur)
-            for name, script in scripts:
-                print(f"Running {name}...", flush=True)
-                cur.execute(script, prepare=False)
-            print("Checking refreshed analysis results...", flush=True)
-            summaries = validate_results(cur)
-    print("Analysis refresh committed successfully.")
-    for table, count, earliest, latest in summaries:
-        print(f"analysis.{table}: rows={count}, earliest={earliest}, latest={latest}")
-    print("The simulations need to be refreshed separately before Power BI uses their new results.")
+    report = new_report(
+        "STAGING_TO_ANALYSIS", "rent_vs_buy_analysis",
+        ("staging_input_validation", "analysis_key_validation",
+         "long_table_reconciliation", "base_index_validation"),
+        extra_fields={
+            "refresh_sql_files": list(SQL_FILES),
+            "analysis_tables": list(TABLE_KEYS),
+            "notes": [
+                "Table counts and date ranges are snapshots, not row-level change classifications.",
+                "CAGR formulas and other derived values require independent SQL/formula tests.",
+                "Successful refresh does not automatically refresh owner or renter simulations.",
+            ],
+        },
+    )
+    try:
+        scripts = [(name, (SQL_DIR / name).read_text(encoding="utf-8-sig"))
+                   for name in SQL_FILES]
+        load_dotenv(HERE / "API.env")
+        password = os.getenv("pg_password", "")
+        if not password:
+            raise ValueError("Missing pg_password in API.env beside this script.")
+
+        # Connection context commits only after all reconciliation checks pass.
+        with psycopg.connect(host="localhost", port=5432, dbname="rentvsbuy",
+                             user="postgres", password=password, connect_timeout=10) as conn:
+            conn.isolation_level = psycopg.IsolationLevel.REPEATABLE_READ
+            with conn.cursor() as cur:
+                cur.execute("SELECT pg_try_advisory_xact_lock(726562, 4)")
+                if not cur.fetchone()[0]:
+                    raise ValueError("Another analysis refresh is already running.")
+                print("Checking staging inputs...", flush=True)
+                report["staging_before_refresh"] = source_snapshot(cur)
+                validate_sources(cur)
+                report["checks"]["staging_input_validation"] = "PASS"
+                print("Staging input validation: PASS", flush=True)
+
+                report["analysis_before_refresh"] = table_snapshot(cur)
+                for name, script in scripts:
+                    print(f"Running {name}...", flush=True)
+                    cur.execute(script, prepare=False)
+
+                print("Checking refreshed analysis results...", flush=True)
+                summaries = validate_results(cur)
+                report["checks"]["analysis_key_validation"] = "PASS"
+                report["checks"]["long_table_reconciliation"] = "PASS"
+                report["checks"]["base_index_validation"] = "PASS"
+                report["analysis_after_refresh"] = table_snapshot(cur)
+                print("Analysis reconciliation: PASS", flush=True)
+                report["staging_after_refresh"] = source_snapshot(cur)
+                if report["staging_after_refresh"] != report["staging_before_refresh"]:
+                    raise ValueError("Staging changed during the analysis refresh.")
+
+        report["transaction_committed"] = True
+        report["status"] = "PASS"
+        print("Analysis refresh committed successfully.")
+        for table, count, earliest, latest in summaries:
+            before = report["analysis_before_refresh"][table]["rows"]
+            print(f"analysis.{table}: rows={count}, previously={before}, "
+                  f"earliest={earliest}, latest={latest}")
+        print("The simulations need to be refreshed separately before Power BI uses their new results.")
+    except Exception as error:
+        report["error_type"] = type(error).__name__
+        report["error_message"] = str(error)[:500]
+        print(f"Analysis refresh failed: {error}", file=sys.stderr)
+        print("The database transaction was not committed.", file=sys.stderr)
+        raise
+    finally:
+        try:
+            path = save_report(report, "analysis", REPORT_DIR)
+            print(f"Reconciliation report: {path}", flush=True)
+        except OSError as error:
+            print(f"Could not save reconciliation report: {error}", file=sys.stderr)
 
 
 if __name__ == "__main__":

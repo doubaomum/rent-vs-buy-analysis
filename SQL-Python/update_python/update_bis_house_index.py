@@ -20,6 +20,7 @@ from urllib.request import Request, urlopen
 
 import psycopg
 from dotenv import load_dotenv
+from reconciliation import new_report, check_classification, check_changed_count, save_report
 
 API_URL = "https://stats.bis.org/api/v2/data/dataflow/BIS/WS_SPP/1.0/Q.CA.R.628"
 DATAFLOW_ID = "BIS,WS_SPP,1.0"
@@ -85,7 +86,81 @@ def clean_csv(content, earliest_date, today):
     return [rows[period] for period in sorted(rows)], missing_count
 
 
+RAW_COLUMNS = (
+    "dataflow_id", "series_key", "freq", "ref_area", "value_type",
+    "unit_measure", "unit_name", "unit_multiplier", "time_period",
+    "obs_conf", "obs_pre_break", "obs_status", "obs_value",
+)
+
+
+def normalized_row(values):
+    """Compare source to database without treating numeric formatting as changes."""
+    return tuple(
+        Decimal(str(value)) if index == 12 and value is not None
+        else str(value) if value is not None else None
+        for index, value in enumerate(values)
+    )
+
+
+def check_api_raw(cur, rows):
+    """Validate all 13 fields of each received BIS observation."""
+    errors = 0
+    for row in rows:
+        cur.execute("""
+            SELECT dataflow_id, series_key, freq, ref_area, value_type,
+                   unit_measure, unit_name, unit_multiplier, time_period,
+                   obs_conf, obs_pre_break, obs_status, obs_value
+            FROM raw.canada_house_price_index_2010_100
+            WHERE series_key = %s AND time_period = %s;
+        """, (row[1], row[8]))
+        result = cur.fetchone()
+        if result is None or normalized_row(result) != normalized_row(row):
+            errors += 1
+    if errors:
+        raise ValueError(f"BIS/RAW reconciliation failed: {errors} mismatches.")
+
+
+def check_raw_staging(cur):
+    """Check the complete selected BIS series against quarterly staging."""
+    cur.execute("""
+        SELECT COUNT(*)
+        FROM raw.canada_house_price_index_2010_100 AS r
+        FULL OUTER JOIN stg.canada_house_price_index_2010_100 AS s
+          ON r.time_period::date = s.date_period
+         AND r.series_key = %s
+        WHERE (r.series_key = %s OR r.series_key IS NULL)
+          AND (r.time_period IS NULL OR s.date_period IS NULL
+               OR r.obs_value::numeric IS DISTINCT FROM s.price_index);
+    """, (SERIES_KEY, SERIES_KEY))
+    mismatches = cur.fetchone()[0]
+    if mismatches:
+        raise ValueError(f"RAW/STAGING reconciliation failed: {mismatches} mismatches.")
+
+
 def main():
+    report = new_report(
+        source="BIS", dataset=f"{DATAFLOW_ID}/{SERIES_KEY}",
+        checks=("classification", "raw_change_count", "api_raw", "raw_staging"),
+        extra_fields={"frequency": "quarterly", "index_base": "2010=100",
+                      "history_start": None, "history_latest_in_batch": None},
+    )
+    try:
+        run_update(report)
+    except Exception as error:
+        report["error_type"] = type(error).__name__
+        report["error_message"] = str(error)[:500]
+        raise
+    finally:
+        try:
+            path = save_report(report, "bis_house_index", Path(__file__).resolve().parent.parent / "reconciliation_reports")
+            print(f"Reconciliation report: {path}")
+        except OSError as save_error:
+            print(f"Could not save reconciliation report: {save_error}", file=sys.stderr)
+            if report["status"] == "PASS":
+                raise
+
+
+def run_update(report):
     load_dotenv(Path(__file__).resolve().parent / "API.env")
     password = os.getenv("pg_password", "")
     if not password:
@@ -119,6 +194,7 @@ def main():
             ):
                 raise ValueError("The raw table needs an existing quarter-end start date.")
 
+            report["history_start"] = earliest_date.isoformat()
             print(f"Fetching BIS quarterly history from {earliest_date}...")
             request = Request(API_URL, headers={
                 "Accept": "application/vnd.sdmx.data+csv;version=1.0.0",
@@ -126,6 +202,35 @@ def main():
             with urlopen(request, timeout=60) as response:
                 content = response.read().decode("utf-8-sig")
             rows, missing_count = clean_csv(content, earliest_date, date.today())
+            report["records"].update(
+                received=len(rows) + missing_count,
+                valid=len(rows), missing_skipped=missing_count,
+                rejected=missing_count,
+            )
+            report["history_latest_in_batch"] = rows[-1][8]
+
+            # Classify using the exact same fields as the database UPSERT.
+            inserted = updated = unchanged = 0
+            for row in rows:
+                cur.execute("""
+                    SELECT dataflow_id, series_key, freq, ref_area, value_type,
+                           unit_measure, unit_name, unit_multiplier, time_period,
+                           obs_conf, obs_pre_break, obs_status, obs_value
+                    FROM raw.canada_house_price_index_2010_100
+                    WHERE series_key = %s AND time_period = %s;
+                """, (row[1], row[8]))
+                before = cur.fetchone()
+                if before is None:
+                    inserted += 1
+                elif normalized_row(before) != normalized_row(row):
+                    updated += 1
+                else:
+                    unchanged += 1
+            check_classification(len(rows), inserted, updated, unchanged)
+            report["planned_raw_changes"] = {
+                "inserted": inserted, "updated": updated, "unchanged": unchanged,
+            }
+            report["checks"]["classification"] = "PASS"
 
             cur.execute("""
                 CREATE UNIQUE INDEX IF NOT EXISTS ux_bis_ca_house_raw_series_period
@@ -163,6 +268,8 @@ def main():
                 );
             """, rows)
             raw_changed = cur.rowcount
+            check_changed_count(raw_changed, inserted, updated)
+            report["checks"]["raw_change_count"] = "PASS"
             cur.execute("""
                 SELECT COUNT(*), MAX(time_period::date)
                 FROM raw.canada_house_price_index_2010_100;
@@ -191,9 +298,32 @@ def main():
             """)
             staging_count, staging_latest = cur.fetchone()
 
+            # Both checks run BEFORE the transaction commits.
+            check_raw_staging(cur)
+            report["checks"]["raw_staging"] = "PASS"
+            print("RAW/STAGING reconciliation: PASS")
+            check_api_raw(cur, rows)
+            report["checks"]["api_raw"] = "PASS"
+            print(f"BIS/RAW reconciliation: PASS ({len(rows)} quarters verified)")
+
+    report["transaction_committed"] = True
+    report["committed_raw_changes"] = dict(report["planned_raw_changes"])
+    report["database"] = {
+        "raw_changed_rows": raw_changed,
+        "raw_total_rows": raw_count,
+        "raw_latest_date": raw_latest.isoformat() if raw_latest else None,
+        "staging_changed_rows": staging_changed,
+        "staging_total_rows": staging_count,
+        "staging_latest_date": staging_latest.isoformat() if staging_latest else None,
+    }
+    report["status"] = "PASS"
     print("BIS house price index update committed successfully.")
     print(f"Valid observations processed: {len(rows)}")
     print(f"Missing values skipped: {missing_count}")
+    print(f"Inserted records: {inserted}")
+    print(f"Updated records: {updated}")
+    print(f"Unchanged records: {unchanged}")
+    print("RAW classification check: PASS")
     print(f"Raw rows inserted or updated: {raw_changed}")
     print(f"Raw total rows: {raw_count}")
     print(f"Raw latest date: {raw_latest}")
