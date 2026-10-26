@@ -4,3 +4,11 @@ data/processed/final/*-new.csv
 API.env
 __pycache__/
 *.py[cod]
+
+
+# Generated reconciliation reports
+SQL-Python/reconciliation_reports/*.json
+
+# Python cache
+__pycache__/
+*.pyc

@@ -30,6 +30,7 @@ import psycopg
 import truststore
 from psycopg import sql
 from dotenv import load_dotenv
+from reconciliation import new_report, check_classification, check_changed_count, save_report
 
 GROUPS = (
     "c11", "bc_victoria", "bc_vancouver", "ab_calgary", "ab_edmonton",
@@ -141,6 +142,79 @@ def read_source(path=None):
     return result, missing_cells
 
 
+STAGING_SOURCE_FIELDS = (
+    ("vancouver_index", "bc_vancouver_index"),
+    ("calgary_index", "ab_calgary_index"),
+    ("edmonton_index", "ab_edmonton_index"),
+    ("toronto_index", "on_toronto_index"),
+    ("ottawa_index", "on_ottawa_index"),
+    ("montreal_index", "qc_montreal_index"),
+)
+REPORT_FOLDER = Path(__file__).resolve().parent.parent / "reconciliation_reports"
+
+
+def numeric_value(value):
+    """Use exact Decimal equality, preserving meaningful zero and NULL values."""
+    if value is None or str(value).strip() == "":
+        return None
+    return Decimal(str(value).strip().replace(",", ""))
+
+
+def read_raw_history(cur):
+    """Load all source columns; detect duplicate logical months before any writes."""
+    cur.execute(sql.SQL("SELECT {} FROM raw.city_house_price_index").format(
+        sql.SQL(", ").join(map(sql.Identifier, RAW_COLUMNS))
+    ))
+    result = {}
+    for label, *values in cur.fetchall():
+        period = parse_period(label)
+        if period in result:
+            raise ValueError(f"Duplicate logical month in RAW: {period}")
+        result[period] = (label, tuple(values))
+    return result
+
+
+def reconcile_source_raw(cur, source, start_date):
+    """Compare every submitted source month and all 60 columns to committed-pending RAW."""
+    actual = read_raw_history(cur)
+    count = 0
+    for period, source_values in source.items():
+        if period < start_date:
+            continue
+        if period not in actual:
+            raise ValueError(f"Source/RAW reconciliation missing month: {period}")
+        stored_values = actual[period][1]
+        for column, stored in zip(VALUE_COLUMNS, stored_values):
+            if numeric_value(stored) != numeric_value(source_values[column]):
+                raise ValueError(f"Source/RAW mismatch: {period}, {column}")
+        count += 1
+    return count
+
+
+def reconcile_raw_staging(cur):
+    """Compare the entire RAW history to the six-city STAGING projection."""
+    raw = read_raw_history(cur)
+    fields = tuple(name for name, _ in STAGING_SOURCE_FIELDS)
+    cur.execute(sql.SQL("SELECT date_period, {} FROM stg.city_house_price_index").format(
+        sql.SQL(", ").join(map(sql.Identifier, fields))
+    ))
+    staged = {}
+    for period, *values in cur.fetchall():
+        if period in staged:
+            raise ValueError(f"Duplicate STAGING month: {period}")
+        staged[period] = values
+    if set(staged) != set(raw):
+        missing = sorted(set(raw) - set(staged))[:3]
+        extra = sorted(set(staged) - set(raw))[:3]
+        raise ValueError(f"RAW/STAGING date mismatch: missing={missing}, extra={extra}")
+    positions = {name: i for i, name in enumerate(VALUE_COLUMNS)}
+    for period, (_, raw_values) in raw.items():
+        for idx, (target_field, source_field) in enumerate(STAGING_SOURCE_FIELDS):
+            if numeric_value(raw_values[positions[source_field]]) != numeric_value(staged[period][idx]):
+                raise ValueError(f"RAW/STAGING mismatch: {period}, {target_field}")
+    return len(raw)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--csv", type=Path, help="Read a local CSV instead of downloading.")
@@ -156,6 +230,30 @@ def main():
         print("CSV validation passed; the database was not accessed.")
         return
 
+    report = new_report(
+        source="Teranet", dataset="Teranet-National-Bank-C11",
+        checks=("classification", "raw_change_count", "source_raw", "raw_staging"),
+        extra_fields={"periodicity": "monthly", "raw_columns": len(RAW_COLUMNS),
+                      "staging_cities": [name for name, _ in STAGING_SOURCE_FIELDS]},
+    )
+    report["records"].update(received=len(records), valid=len(records))
+    try:
+        sync_database(records, source_start, source_end, report)
+    except Exception as error:
+        report["error_type"] = type(error).__name__
+        report["error_message"] = str(error)[:500]
+        raise
+    finally:
+        try:
+            output = save_report(report, "city_house_index", REPORT_FOLDER)
+            print(f"Reconciliation report: {output}")
+        except OSError as report_error:
+            print(f"Could not save reconciliation report: {report_error}", file=sys.stderr)
+            if report["status"] == "PASS":
+                raise
+
+
+def sync_database(records, source_start, source_end, report):
     load_dotenv(Path(__file__).resolve().parent / "API.env")
     password = os.getenv("pg_password", "")
     if not password:
@@ -166,13 +264,8 @@ def main():
         password=password, connect_timeout=10,
     ) as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT transaction_date FROM raw.city_house_price_index;")
-            existing_dates = {}
-            for (stored_text,) in cur.fetchall():
-                period = parse_period(stored_text)
-                if period in existing_dates:
-                    raise ValueError(f"The raw table contains duplicate month {period}.")
-                existing_dates[period] = stored_text
+            before = read_raw_history(cur)
+            existing_dates = {period: row[0] for period, row in before.items()}
             if existing_dates:
                 if source_start > min(existing_dates):
                     raise ValueError("The CSV does not include the database's full existing history.")
@@ -189,6 +282,28 @@ def main():
                 rows.append((label,) + tuple(records[period][c] for c in VALUE_COLUMNS))
             if not rows:
                 raise ValueError("No CSV observations match the database date range.")
+
+            # Classification is based on the same 60 stored fields used in UPSERT.
+            inserted = updated = unchanged = 0
+            for period, values in sorted(records.items()):
+                if period < start_date:
+                    continue
+                if period not in before:
+                    inserted += 1
+                elif any((stored is None) != (values[column] is None)
+                         or (stored is not None and values[column] is not None
+                             and str(stored) != str(values[column]))
+                         for column, stored in zip(VALUE_COLUMNS, before[period][1])):
+                    updated += 1
+                else:
+                    unchanged += 1
+            check_classification(len(rows), inserted, updated, unchanged)
+            report["records"]["valid"] = len(rows)
+            report["records"]["excluded_before_database_start"] = len(records) - len(rows)
+            report["planned_raw_changes"] = {
+                "inserted": inserted, "updated": updated, "unchanged": unchanged,
+            }
+            report["checks"]["classification"] = "PASS"
 
             cur.execute("""
                 CREATE UNIQUE INDEX IF NOT EXISTS ux_city_house_index_raw_period
@@ -216,6 +331,8 @@ def main():
             )
             cur.executemany(query, rows)
             raw_changed = cur.rowcount
+            check_changed_count(raw_changed, inserted, updated)
+            report["checks"]["raw_change_count"] = "PASS"
             cur.execute("""
                 SELECT COUNT(*), MAX(TO_DATE(TRIM(transaction_date), 'Mon-YYYY'))
                 FROM raw.city_house_price_index;
@@ -261,7 +378,28 @@ def main():
             cur.execute("SELECT COUNT(*), MAX(date_period) FROM stg.city_house_price_index;")
             staging_count, staging_latest = cur.fetchone()
 
+            # Validate both transformations before the connection commits.
+            n = reconcile_source_raw(cur, records, start_date)
+            report["checks"]["source_raw"] = "PASS"
+            print(f"Teranet/RAW reconciliation: PASS ({n} months verified)")
+            m = reconcile_raw_staging(cur)
+            report["checks"]["raw_staging"] = "PASS"
+            print(f"RAW/STAGING reconciliation: PASS ({m} months verified)")
+
+    report["transaction_committed"] = True
+    report["committed_raw_changes"] = dict(report["planned_raw_changes"])
+    report["database"] = {
+        "raw_changed_rows": raw_changed, "raw_total_rows": raw_count,
+        "raw_latest_date": raw_latest.isoformat() if raw_latest else None,
+        "staging_changed_rows": staging_changed, "staging_total_rows": staging_count,
+        "staging_latest_date": staging_latest.isoformat() if staging_latest else None,
+    }
+    report["status"] = "PASS"
     print("City house price index update committed successfully.")
+    print(f"Inserted records: {inserted}")
+    print(f"Updated records: {updated}")
+    print(f"Unchanged records: {unchanged}")
+    print("RAW classification check: PASS")
     print(f"Raw rows inserted or updated: {raw_changed}")
     print(f"Raw total rows: {raw_count}")
     print(f"Raw latest date: {raw_latest}")

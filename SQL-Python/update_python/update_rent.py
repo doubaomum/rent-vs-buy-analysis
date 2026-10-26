@@ -20,6 +20,8 @@ import sys
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from reconciliation import new_report, check_classification, check_changed_count, save_report
+
 from bs4 import BeautifulSoup
 import truststore
 
@@ -143,7 +145,19 @@ def download_all():
     return records, missing_count
 
 
-def sync_database(source):
+def normalized_raw_field(value):
+    """Mirror RAW UPSERT text comparison: trim whitespace and remove commas."""
+    if value is None:
+        return None
+    normalized = str(value).strip().replace(",", "")
+    return normalized or None
+
+
+def normalized_record(values):
+    return tuple(normalized_raw_field(v) for v in values)
+
+
+def sync_database(source, report):
     import psycopg
     from psycopg import sql
     from dotenv import load_dotenv
@@ -157,7 +171,7 @@ def sync_database(source):
         with conn.cursor() as cur:
             cur.execute(sql.SQL("SELECT city, rent_period, {} FROM raw.city_rent_raw;")
                         .format(sql.SQL(", ").join(map(sql.Identifier, VALUE_COLUMNS))))
-            existing, city_periods = {}, {}
+            existing, city_periods, prior_values = {}, {}, {}
             for city, label, *values in cur.fetchall():
                 if city not in LOCATIONS or label is None or not str(label).strip():
                     continue
@@ -165,6 +179,7 @@ def sync_database(source):
                 if (city, period) in existing:
                     raise ValueError(f"Duplicate dated raw rent records: {city}, {period}.")
                 existing[(city, period)] = label
+                prior_values[(city, period)] = normalized_record(values)
                 city_periods.setdefault(city, []).append(period)
                 # All undated rows and existing April observations stay intact.
                 rents = [rent_number(values[n]) for n in range(0, 10, 2)]
@@ -182,6 +197,25 @@ def sync_database(source):
                         incoming.append((city, label) + values)
             if not incoming:
                 raise ValueError("No published observations match the existing history range.")
+
+            # Classify the same normalized text fields used by RAW's UPSERT.
+            inserted = updated = unchanged = 0
+            planned_changes = []
+            for city, label, *values in incoming:
+                key = (city, parse_period(label))
+                old = prior_values.get(key)
+                new = normalized_record(values)
+                if old is None:
+                    inserted += 1
+                    planned_changes.append({"city": city, "period": key[1].isoformat(), "action": "INSERT"})
+                elif old != new:
+                    updated += 1
+                    planned_changes.append({"city": city, "period": key[1].isoformat(), "action": "UPDATE"})
+                else:
+                    unchanged += 1
+            check_classification(len(incoming), inserted, updated, unchanged)
+            report["checks"]["classification"] = "PASS"
+            report["planned_raw_changes"] = dict(inserted=inserted, updated=updated, unchanged=unchanged)
             cur.execute("""
                 CREATE UNIQUE INDEX IF NOT EXISTS ux_city_rent_raw_dated_period
                 ON raw.city_rent_raw (city, rent_period)
@@ -206,6 +240,8 @@ def sync_database(source):
             )
             cur.executemany(query, incoming)
             raw_changed = cur.rowcount
+            check_changed_count(raw_changed, inserted, updated)
+            report["checks"]["raw_change_count"] = "PASS"
             cur.execute("SELECT COUNT(*) FROM raw.city_rent_raw;")
             raw_count = cur.fetchone()[0]
             cur.execute(sql.SQL("""
@@ -240,8 +276,79 @@ def sync_database(source):
             stage_changed = cur.rowcount
             cur.execute("SELECT COUNT(*), MAX(date_period) FROM stg.city_rent;")
             stage_count, stage_latest = cur.fetchone()
+
+            # Reconcile the 10 published RAW fields for every processed city/month.
+            # This does not compare the raw city/month row count with pivoted STAGING.
+            cur.execute(sql.SQL("SELECT city, rent_period, {} FROM raw.city_rent_raw WHERE city = ANY(%s);")
+                        .format(sql.SQL(", ").join(map(sql.Identifier, VALUE_COLUMNS))), (list(LOCATIONS),))
+            stored = {}
+            for city, label, *values in cur.fetchall():
+                if label is None or not str(label).strip():
+                    continue
+                key = (city, parse_period(label))
+                if key in stored:
+                    raise ValueError(f"Duplicate RAW city/month during reconciliation: {key}")
+                stored[key] = normalized_record(values)
+            source_mismatches = sum(
+                stored.get((city, parse_period(label))) != normalized_record(values)
+                for city, label, *values in incoming
+            )
+            if source_mismatches:
+                raise ValueError(f"CMHC/RAW reconciliation failed: {source_mismatches} mismatches")
+            report["checks"]["source_raw"] = "PASS"
+            print(f"CMHC/RAW reconciliation: PASS ({len(incoming)} city-months verified)")
+
+            # Recompute the exact RAW-to-STAGING pivot and verify its rows.
+            # Existing STAGING-only legacy dates are left untouched, as before.
+            cur.execute(sql.SQL("""
+                WITH expected AS (
+                    SELECT {date} AS period, {pivot}
+                    FROM raw.city_rent_raw
+                    WHERE NULLIF(BTRIM(rent_period), '') IS NOT NULL AND city = ANY(%s)
+                    GROUP BY {date}
+                )
+                SELECT COUNT(*)
+                FROM expected e
+                LEFT JOIN stg.city_rent s ON s.date_period = e.period
+                WHERE s.date_period IS NULL OR ({actual}) IS DISTINCT FROM ({expected});
+            """).format(
+                date=sql.SQL(DATE_SQL),
+                pivot=sql.SQL(", ").join(sql.SQL("MAX(CASE WHEN city = {} THEN {} END) AS {}")
+                    .format(sql.Literal(city), sql.SQL(RENT_SQL), sql.Identifier(col))
+                    for city, col in zip(LOCATIONS, stage_columns)),
+                actual=sql.SQL(", ").join(sql.SQL("s.{}").format(sql.Identifier(col)) for col in stage_columns),
+                expected=sql.SQL(", ").join(sql.SQL("e.{}").format(sql.Identifier(col)) for col in stage_columns),
+            ), (list(LOCATIONS),))
+            stage_mismatches = cur.fetchone()[0]
+            if stage_mismatches:
+                raise ValueError(f"RAW/STAGING reconciliation failed: {stage_mismatches} mismatches")
+            report["checks"]["raw_staging"] = "PASS"
+            print("RAW/STAGING reconciliation: PASS")
+
+    # The connection context has committed; only now publish completed changes.
+    report["transaction_committed"] = True
+    report["committed_raw_changes"] = dict(report["planned_raw_changes"])
+    report["status"] = "PASS"
+    report["database"] = {
+        "raw_changed_rows": raw_changed, "raw_total_rows": raw_count,
+        "raw_dated_rows": raw_dated,
+        "raw_latest_date": raw_latest.isoformat() if raw_latest else None,
+        "staging_changed_rows": stage_changed, "staging_total_rows": stage_count,
+        "staging_latest_date": stage_latest.isoformat() if stage_latest else None,
+    }
+    report["change_summary_by_city"] = {
+        city: {
+            "inserted": sum(c["city"] == city and c["action"] == "INSERT" for c in planned_changes),
+            "updated": sum(c["city"] == city and c["action"] == "UPDATE" for c in planned_changes),
+        }
+        for city in LOCATIONS
+    }
     print("CMHC rent database update committed successfully.")
     print(f"Observations processed for the existing history range: {len(incoming)}")
+    print(f"Inserted records: {inserted}")
+    print(f"Updated records: {updated}")
+    print(f"Unchanged records: {unchanged}")
+    print("RAW classification check: PASS")
     print(f"Raw rows inserted or updated: {raw_changed}")
     print(f"Raw total rows: {raw_count}")
     print(f"Raw dated rows: {raw_dated}")
@@ -252,10 +359,36 @@ def sync_database(source):
 
 
 def main():
-    source, missing = download_all()
-    print(f"Published city-period observations fetched: {sum(map(len, source.values()))}")
-    print(f"Missing or suppressed rent cells: {missing}")
-    sync_database(source)
+    report = new_report(
+        "CMHC", "Annual October Row / Apartment Average Rent (Table 2.2.11)",
+        ("classification", "raw_change_count", "source_raw", "raw_staging"),
+    )
+    report["reconciliation_scope"] = (
+        "Processed city-month source rows -> RAW; dates represented by known-city RAW "
+        "-> pivoted STAGING. Preserves undated records and legacy stage-only dates."
+    )
+    try:
+        source, missing = download_all()
+        fetched = sum(map(len, source.values()))
+        print(f"Published city-period observations fetched: {fetched}")
+        print(f"Missing or suppressed rent cells: {missing}")
+        report["records"].update(received=fetched, valid=fetched, missing_skipped=0, rejected=0)
+        report["missing_or_suppressed_rent_cells"] = missing
+        report["source_city_month_counts"] = {city: len(history) for city, history in source.items()}
+        sync_database(source, report)
+    except Exception as error:
+        report["error_type"] = type(error).__name__
+        raise
+    finally:
+        try:
+            path = save_report(
+                report, "rent", Path(__file__).resolve().parent.parent / "reconciliation_reports"
+            )
+            print(f"Reconciliation report: {path}")
+        except OSError as report_error:
+            print(f"Failed to save reconciliation report: {type(report_error).__name__}", file=sys.stderr)
+            if report["status"] == "PASS":
+                raise
 
 
 if __name__ == "__main__":

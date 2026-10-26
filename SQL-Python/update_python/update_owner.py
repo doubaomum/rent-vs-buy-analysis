@@ -6,6 +6,9 @@ Run from SQL-Python: python3 .\update_python\update_owner.py
 """
 
 import os
+import json
+from datetime import datetime, timezone
+from uuid import uuid4
 from pathlib import Path
 import sys
 from time import monotonic
@@ -30,6 +33,18 @@ RESULT_COLUMNS = (
     "mortgage_payment", "mortgage_interest", "mortgage_principal", "mortgage_balance",
     "owner_monthly_unrecoverable_cost", "cumulative_unrecoverable_cost", "owner_net_worth",
 )
+REPORT_DIR = PROJECT_DIR / "reconciliation_reports"
+
+
+def save_audit(report):
+    """Write an audit trail without serializing database secrets or scenario data."""
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    path = REPORT_DIR / f"owner_{stamp}_{uuid4().hex[:8]}.json"
+    path.write_text(json.dumps(report, indent=2, default=str) + "\n", encoding="utf-8")
+    return path
+
+
 CALC_COLUMNS = (
     "scenario_id", "date_period", "month_number", "initial_loan_after_insurance",
     "amortization_years", "mortgage_term_year", "applied_mortgage_rate",
@@ -201,6 +216,51 @@ def write_results(cur, results):
     return cur.rowcount
 
 
+
+def reconcile_owner_batch(cur, input_columns, expected_rows):
+    """Compare persisted monthly inputs and Python results to this batch's source data.
+
+    Checks happen inside the same transaction as the upsert, before commit.
+    This validates persisted values; it does not independently prove financial formulas.
+    """
+    cur.execute("SELECT COUNT(*) FROM _owner_input")
+    input_count = cur.fetchone()[0]
+    cur.execute("SELECT COUNT(*) FROM _owner_results")
+    result_count = cur.fetchone()[0]
+    if input_count != expected_rows or result_count != expected_rows:
+        raise ValueError(
+            f"Owner batch row mismatch: inputs={input_count}, results={result_count}, expected={expected_rows}."
+        )
+    for table in ("_owner_input", "_owner_results"):
+        cur.execute(sql.SQL("""
+            SELECT 1 FROM {} GROUP BY scenario_id, date_period
+            HAVING COUNT(*) > 1 LIMIT 1
+        """).format(sql.Identifier(table)))
+        if cur.fetchone():
+            raise ValueError(f"Duplicate owner scenario/date in {table}.")
+
+    key_match = "m.scenario_id = s.scenario_id AND m.date_period = s.date_period"
+    for source, values, label in (
+        ("_owner_input", tuple(c for c in input_columns if c not in ("scenario_id", "date_period")), "inputs"),
+        ("_owner_results", RESULT_COLUMNS, "results"),
+    ):
+        different = sql.SQL(" OR ").join(
+            sql.SQL("m.{c} IS DISTINCT FROM s.{c}").format(c=sql.Identifier(c))
+            for c in values
+        )
+        cur.execute(sql.SQL("""
+            SELECT s.scenario_id, s.date_period
+            FROM {source} s LEFT JOIN simulation.owner_monthly_schedule m
+              ON m.scenario_id = s.scenario_id AND m.date_period = s.date_period
+            WHERE m.scenario_id IS NULL OR ({different})
+            LIMIT 1
+        """).format(source=sql.Identifier(source), different=different))
+        mismatch = cur.fetchone()
+        if mismatch:
+            raise ValueError(f"Owner {label} reconciliation failed at {mismatch}.")
+    return result_count
+
+
 def refresh_owner(conn):
     scenario_script = (SQL_DIR / "05_refresh_owner_scenarios.sql").read_text(encoding="utf-8-sig")
     month_script = (SQL_DIR / "05_refresh_owner_months.sql").read_text(encoding="utf-8-sig")
@@ -231,7 +291,7 @@ def refresh_owner(conn):
         """, prepare=False)
         cur.execute("SELECT * FROM _owner_input LIMIT 0")
         input_columns = [c.name for c in cur.description if c.name not in RESULT_COLUMNS]
-        rows_processed = input_changes = result_changes = 0
+        rows_processed = input_changes = result_changes = verified_rows = 0
         last_progress = monotonic()
         print(f"Recalculating {count:,} complete scenarios in batches of {BATCH_SIZE}...", flush=True)
         for offset in range(0, count, BATCH_SIZE):
@@ -250,6 +310,7 @@ def refresh_owner(conn):
             results = calculate_owner_batch(owner)
             input_changes += upsert_monthly_inputs(cur, input_columns)
             result_changes += write_results(cur, results)
+            verified_rows += reconcile_owner_batch(cur, input_columns, len(results))
             rows_processed += len(results)
             completed = offset + len(batch)
             if monotonic() - last_progress >= 25 or completed == count:
@@ -262,10 +323,12 @@ def refresh_owner(conn):
             FROM simulation.owner_monthly_schedule m JOIN _owner_refresh_ids r USING (scenario_id)
         """)
         saved_count, latest, missing_results = cur.fetchone()
-        if saved_count != rows_processed or missing_results:
+        if saved_count != rows_processed or saved_count != verified_rows or missing_results:
             raise ValueError("Owner result completeness check failed.")
-        return dict(cutoff=cutoff, scenarios=count, rows=rows_processed, latest=latest,
-                    input_changes=input_changes, result_changes=result_changes, outside_scope=outside_scope)
+        print(f"Owner monthly input/result reconciliation: PASS ({verified_rows:,} rows verified)", flush=True)
+        return dict(cutoff=cutoff, scenarios=count, rows=rows_processed, verified_rows=verified_rows,
+                    latest=latest, input_changes=input_changes, result_changes=result_changes,
+                    outside_scope=outside_scope)
 
 
 def main():
@@ -273,10 +336,31 @@ def main():
     password = os.getenv("pg_password", "")
     if not password:
         raise ValueError("Missing pg_password in API.env beside update_owner.py.")
-    with psycopg.connect(host="localhost", port=5432, dbname="rentvsbuy", user="postgres",
-                         password=password, connect_timeout=10) as conn:
-        conn.isolation_level = psycopg.IsolationLevel.REPEATABLE_READ
-        summary = refresh_owner(conn)
+    report = {"pipeline": "owner_simulation", "status": "RUNNING", "committed": False,
+              "started_at_utc": datetime.now(timezone.utc).isoformat(),
+              "checks": {"monthly_input_reconciliation": "NOT_RUN",
+                         "monthly_result_reconciliation": "NOT_RUN",
+                         "scenario_completeness": "NOT_RUN"}}
+    try:
+        with psycopg.connect(host="localhost", port=5432, dbname="rentvsbuy", user="postgres",
+                             password=password, connect_timeout=10) as conn:
+            conn.isolation_level = psycopg.IsolationLevel.REPEATABLE_READ
+            summary = refresh_owner(conn)
+    except BaseException as error:
+        report.update(status="FAIL", error_type=type(error).__name__,
+                      error_message=str(error)[:1000], finished_at_utc=datetime.now(timezone.utc).isoformat())
+        try:
+            print(f"Reconciliation report: {save_audit(report)}", flush=True)
+        except OSError as report_error:
+            print(f"Could not write FAIL audit report: {report_error}", file=sys.stderr)
+        raise
+    report.update(status="PASS", committed=True,
+                  checks={"monthly_input_reconciliation": "PASS",
+                          "monthly_result_reconciliation": "PASS",
+                          "scenario_completeness": "PASS"},
+                  summary=summary, finished_at_utc=datetime.now(timezone.utc).isoformat(),
+                  scope_note="Only refreshed owner scenarios were reconciled. Financial equations were not independently recalculated.")
+    report_path = save_audit(report)
     print("Owner simulation refresh committed successfully.")
     print(f"Owner cutoff: {summary['cutoff']}")
     print(f"Owner scenarios recalculated: {summary['scenarios']:,}")
@@ -284,6 +368,7 @@ def main():
     print(f"Owner monthly inputs inserted or updated: {summary['input_changes']:,}")
     print(f"Owner monthly results inserted or updated: {summary['result_changes']:,}")
     print(f"Owner refreshed latest date: {summary['latest']}")
+    print(f"Owner reconciliation report: {report_path}")
     if summary["outside_scope"]:
         print(f"Existing scenarios outside the current source/default scenario range retained: {summary['outside_scope']:,}")
     print("Renter results have not been refreshed. Refresh renter before comparing owner and renter in Power BI.")

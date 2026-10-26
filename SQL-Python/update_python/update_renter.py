@@ -6,6 +6,9 @@ Run from SQL-Python: python3 .\update_python\update_renter.py
 """
 
 import os
+import json
+from datetime import datetime, timezone
+from uuid import uuid4
 from pathlib import Path
 import sys
 from datetime import date
@@ -189,6 +192,46 @@ def upsert_inputs(cur, columns):
     return cur.rowcount
 
 
+def reconcile_batch(cur, source_table, key_columns, columns, expected_rows, label):
+    """Compare a temporary batch with persisted rows, in PostgreSQL, before commit.
+
+    This checks every specified value (including SQL NULL) without fetching all
+    simulation rows to Python. Both tables are read inside the same transaction.
+    """
+    compare_columns = tuple(c for c in columns if c not in key_columns)
+    join = sql.SQL(" AND ").join(
+        sql.SQL("t.{c} = s.{c}").format(c=sql.Identifier(c)) for c in key_columns
+    )
+    mismatch = sql.SQL(" OR ").join(
+        sql.SQL("t.{c} IS DISTINCT FROM s.{c}").format(c=sql.Identifier(c))
+        for c in compare_columns
+    )
+    first_key = sql.Identifier(key_columns[0])
+    cur.execute(sql.SQL("SELECT COUNT(*) FROM {}").format(sql.Identifier(source_table)))
+    source_count = cur.fetchone()[0]
+    if source_count != expected_rows:
+        raise ValueError(f"{label}: temporary row count {source_count} != {expected_rows}.")
+    cur.execute(sql.SQL("""
+        SELECT 1 FROM {source} s LEFT JOIN simulation.renter_monthly_schedule t
+        ON {join}
+        WHERE t.{first_key} IS NULL OR ({mismatch}) LIMIT 1
+    """).format(source=sql.Identifier(source_table), join=join,
+                first_key=first_key, mismatch=mismatch))
+    if cur.fetchone():
+        raise ValueError(f"{label}: saved values differ from the temporary batch.")
+    return source_count
+
+
+def save_audit(report):
+    """Write one JSON report per execution outside the DB transaction."""
+    directory = PROJECT_DIR / "reconciliation_reports"
+    directory.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    path = directory / f"renter_{stamp}_{uuid4().hex[:8]}.json"
+    path.write_text(json.dumps(report, indent=2, default=str, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
 def load_calculation_batch(cur):
     # Resolve persistent row IDs after upsert; never replace renter_scenario_id.
     cur.execute(sql.SQL("""
@@ -261,6 +304,7 @@ def refresh_renter(conn):
         cur.execute("SELECT * FROM _renter_input LIMIT 0")
         input_columns = [c.name for c in cur.description if c.name not in RESULT_COLUMNS]
         rows_processed = input_changes = result_changes = 0
+        input_verified = result_verified = 0
         last_progress = monotonic()
         print(f"Recalculating {len(owners):,} owner paths x 2 portfolios through {cutoff}...", flush=True)
         for offset in range(0, len(owners), BATCH_SIZE):
@@ -274,16 +318,25 @@ def refresh_renter(conn):
             cur.execute("ANALYZE _renter_input")
             check_input_batch(cur, expected)
             input_changes += upsert_inputs(cur, input_columns)
+            input_verified += reconcile_batch(
+                cur, "_renter_input", KEY_COLUMNS, input_columns, expected,
+                "Renter monthly inputs")
             renter = load_calculation_batch(cur)
             if len(renter) != expected:
                 raise ValueError("Persistent renter keys do not match this batch's inputs.")
             results = calculate_renter_batch(renter, stock_returns, cpi)
             result_changes += write_results(cur, results)
+            result_verified += reconcile_batch(
+                cur, "_renter_results", ("renter_scenario_id",), RESULT_COLUMNS,
+                expected, "Renter monthly results")
             rows_processed += len(results)
             completed = offset + len(batch)
             if monotonic() - last_progress >= 25 or completed == len(owners):
                 print(f"  Calculated owner paths: {completed:,}/{len(owners):,}; renter monthly rows: {rows_processed:,}", flush=True)
                 last_progress = monotonic()
+        if rows_processed != input_verified or rows_processed != result_verified:
+            raise ValueError("Renter reconciliation count does not match processed rows.")
+        print(f"Renter monthly input/result reconciliation: PASS ({rows_processed:,} rows verified)", flush=True)
         cur.execute("""
             SELECT COUNT(*), MAX(t.date_period), COUNT(*) FILTER (
                 WHERE t.renter_net_worth IS NULL OR t.renter_net_worth_real IS NULL
@@ -308,27 +361,60 @@ def refresh_renter(conn):
 
 
 def main():
-    load_dotenv(HERE / "API.env")
-    password = os.getenv("pg_password", "")
-    if not password:
-        raise ValueError("Missing pg_password in API.env beside update_renter.py.")
-    with psycopg.connect(host="localhost", port=5432, dbname="rentvsbuy", user="postgres",
-                         password=password, connect_timeout=10) as conn:
-        conn.isolation_level = psycopg.IsolationLevel.REPEATABLE_READ
-        summary = refresh_renter(conn)
-    print("Renter simulation refresh committed successfully.")
-    print(f"Renter comparison cutoff: {summary['cutoff']}")
-    print(f"Owner paths used: {summary['owners']:,}")
-    print(f"Renter paths recalculated (two portfolios): {summary['paths']:,}")
-    print(f"Renter monthly observations processed: {summary['rows']:,}")
-    print(f"Renter monthly inputs inserted or updated: {summary['input_changes']:,}")
-    print(f"Renter monthly results inserted or updated: {summary['result_changes']:,}")
-    print(f"Renter refreshed latest date: {summary['latest']}")
-    if summary["retained"]:
-        print(f"Existing rows outside the refresh range retained without recalculation: {summary['retained']:,}")
-    print(f"Owner history remains available through {summary['owner_latest']}.")
-    print(f"For this refresh, compare owner and renter only through {summary['cutoff']}.")
-    print("Paths with a later planned sale are calculated only through the comparison cutoff.")
+    report = {
+        "pipeline": "renter_simulation",
+        "started_at_utc": datetime.now(timezone.utc).isoformat(),
+        "status": "FAIL",
+        "transaction_committed": False,
+        "checks": {
+            "batch_input_reconciliation": "NOT_COMPLETED",
+            "batch_result_reconciliation": "NOT_COMPLETED",
+            "completeness": "NOT_COMPLETED",
+        },
+    }
+    summary = None
+    try:
+        load_dotenv(HERE / "API.env")
+        password = os.getenv("pg_password", "")
+        if not password:
+            raise ValueError("Missing pg_password in API.env beside update_renter.py.")
+        with psycopg.connect(host="localhost", port=5432, dbname="rentvsbuy", user="postgres",
+                             password=password, connect_timeout=10) as conn:
+            conn.isolation_level = psycopg.IsolationLevel.REPEATABLE_READ
+            summary = refresh_renter(conn)
+        # The connection context committed successfully before setting PASS.
+        report["status"] = "PASS"
+        report["transaction_committed"] = True
+        report["summary"] = summary
+        report["checks"] = {
+            "batch_input_reconciliation": "PASS",
+            "batch_result_reconciliation": "PASS",
+            "completeness": "PASS",
+        }
+        print("Renter simulation refresh committed successfully.")
+        print(f"Renter comparison cutoff: {summary['cutoff']}")
+        print(f"Owner paths used: {summary['owners']:,}")
+        print(f"Renter paths recalculated (two portfolios): {summary['paths']:,}")
+        print(f"Renter monthly observations processed: {summary['rows']:,}")
+        print(f"Renter monthly inputs inserted or updated: {summary['input_changes']:,}")
+        print(f"Renter monthly results inserted or updated: {summary['result_changes']:,}")
+        print(f"Renter refreshed latest date: {summary['latest']}")
+        if summary["retained"]:
+            print(f"Existing rows outside the refresh range retained without recalculation: {summary['retained']:,}")
+        print(f"Owner history remains available through {summary['owner_latest']}.")
+        print(f"For this refresh, compare owner and renter only through {summary['cutoff']}.")
+        print("Paths with a later planned sale are calculated only through the comparison cutoff.")
+    except BaseException as error:
+        report["error_type"] = type(error).__name__
+        report["error_message"] = str(error)
+        raise
+    finally:
+        report["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
+        try:
+            location = save_audit(report)
+            print(f"Renter reconciliation report: {location}", flush=True)
+        except OSError as report_error:
+            print(f"Could not write renter reconciliation report: {report_error}", file=sys.stderr)
 
 
 if __name__ == "__main__":
