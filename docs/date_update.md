@@ -1,6 +1,6 @@
 # Data update guide
 
-This project refreshes an existing local PostgreSQL database through Python entry points. Source updaters fetch published observations and synchronize `raw` and `stg`; downstream runners rebuild analysis data and recalculate owner and renter paths. Power BI reads the resulting tables.
+This project refreshes an existing local PostgreSQL database through Python entry points. Source updaters fetch published observations and synchronize `raw` and `stg`; the analysis runner rebuilds analysis data, while owner and renter runners use scenario-level incremental refresh. Power BI reads the resulting tables.
 
 This guide describes the delivered scripts and the reorganized folder layout. Put it at `SQL-Python/DATA_UPDATE_GUIDE.md` so the relative code links below work on GitHub. The dates and counts in the completed-run example are a recorded snapshot, not a claim that every source publishes through the same month.
 
@@ -49,7 +49,7 @@ flowchart TD
 | `raw` | Source-aligned history, often retaining text labels, source fields and quality flags | A source updater fetches and writes observations. These tables are not immutable copies of entire HTTP responses. |
 | `stg` | Typed dates/numbers, selected measures and city pivots | The same source updater explicitly runs staging SQL after updating raw. |
 | `analysis` | Real/rebased indexes, city long tables, CAGR tables and summaries | `update_analysis.py` explicitly reruns the three analysis SQL files. |
-| `simulation` | Scenario assumptions and monthly owner/renter inputs and results | `update_owner.py`, then `update_renter.py`, prepare inputs and run recursive calculations. |
+| `simulation` | Scenario assumptions, monthly owner/renter inputs and results, and verification metadata | `update_owner.py`, then `update_renter.py`, compare current inputs with saved results and recalculate new, changed or unverified scenarios. |
 
 An ordinary table populated with `INSERT ... SELECT` does not automatically synchronize when its source changes. The new entry points perform that synchronization explicitly.
 
@@ -227,23 +227,29 @@ Legacy date and financial alignments are retained: BIS analysis labels are stagi
 
 **VT limitation:** this routine has no `update_vt.py`. Analysis still requires and reads existing `stg.vt_usd`; recalculating `analysis.vt_cad_real` does not download newer VT prices. In the recorded analysis run, VT ended at May 2026. If VT is used in reporting, add/update its source ingestion separately. The current renter portfolios are TSX and S&P 500.
 
-### Owner refresh
+### Owner refresh — incremental by scenario
 
-The owner runner reads city benchmark prices from analysis and five-year mortgage rates from staging. It seeds missing city assumptions, retains existing scenario IDs, updates source-derived inputs and recalculates each path from month zero in batches of 100 complete scenarios.
+The owner runner reads city benchmark prices from analysis and five-year mortgage rates from staging. It seeds missing city assumptions, retains existing scenario IDs, and prepares monthly inputs in batches of 100 complete scenarios. It compares the regenerated inputs with stored monthly rows before deciding which scenarios need financial recalculation.
+
+A scenario is recalculated when it is new or unverified, its monthly inputs or expected row count changed, its saved financial results are invalid or differ from the previously verified fingerprint, or the calculation signature changed. That signature covers the runner, `05` SQL scripts, simulation Python sources and relevant runtime versions. Unchanged, previously verified scenarios skip the Python recursive calculations. **A changed scenario is recalculated from month zero for its entire history; this is scenario-level incremental refresh, not month-level continuation.** All eligible scenarios are still checked and their SQL monthly inputs are regenerated.
+
+The runner records verification metadata in `simulation.owner_refresh_state`: scenario ID, calculation signature, result signature, verified row count and verification timestamp. Recalculated inputs/results are reconciled with persisted database rows before the transaction commits. Cached results are checked against current inputs and stored fingerprints; this does not independently revalidate the financial equations.
 
 Its cutoff is the earliest of the seven cities' latest valid price months and the latest valid mortgage month. Required gaps within that coverage are errors rather than interpolated values. Scenario creation still requires actual purchase and sale prices at the requested holding-period endpoints; it does not forecast future sale prices.
 
-The original mortgage payment, renewal, ownership-cost and net-worth formulas remain in the calculation module. Existing relevant saved assumptions are retained; new scenarios use the original defaults. All batches commit together or roll back together.
+The original mortgage payment, renewal, ownership-cost and net-worth formulas remain in the calculation module. Existing saved assumptions are retained, and new scenarios use the original defaults. All batches commit together or roll back together. Run with `--full` to force recalculation of all eligible scenarios and refresh verification metadata.
 
-### Renter refresh
+### Renter refresh — incremental by owner scenario
 
-The renter runner rereads the current owner results, annual city rents, S&P 500/TSX CAD prices and CPI. It calculates two portfolios at the original default investment discipline of `1.00`, keeping each owner path's months and portfolios together in a batch.
+The renter runner reads current owner results, annual city rents, S&P 500/TSX CAD prices and CPI. It prepares monthly inputs for two portfolios (`sp500_only` and `tsx_only`) at the original default investment discipline of `1.00`. Each owner scenario and **both portfolio paths** form a single change-detection unit; batches contain up to 100 owner scenarios.
+
+The runner compares regenerated monthly renter inputs, existing results and saved verification metadata in `simulation.renter_refresh_state`. It recalculates an owner scenario's **two complete renter portfolio histories** if it is new or unverified, inputs or expected rows change, results are invalid or unexpectedly changed, or the calculation signature differs. Otherwise it skips both portfolio calculations. That signature also incorporates investment and renter-policy assumptions plus the prepared market-return/CPI history. **A change to market history or shared assumptions can therefore trigger recalculation of every eligible renter scenario**, even if only a few observations changed. Unchanged scenarios still require SQL input generation and verification checks.
 
 Its cutoff is the minimum of owner coverage, both stock-price coverages, CPI coverage and the latest rent year's December under the existing calendar-year rent rule. For example, an October 2025 rent observation is applied to January–December 2025 in this model. It is not extended to 2026.
 
-The original rent recursion, seed-42 moving sequence, investment cash flows, zero portfolio floor and CPI-based net-worth formulas remain. Missing investment-month stock returns are rejected instead of silently filled with zero; month zero still receives no return. The runner preserves existing renter row IDs and commits all batches together.
+The original rent recursion, seed-42 moving sequence, investment cash flows, zero portfolio floor and CPI-based net-worth formulas remain. Missing investment-month stock returns are rejected instead of silently filled with zero; month zero still receives no return. Existing renter row IDs are preserved. Recalculated rows are reconciled before commit; skipped rows are compared with previously verified fingerprints. Use `--full` to force a complete eligible-scenario refresh.
 
-Owner and renter entry points share a simulation-run lock. Existing rows outside a runner's active scope are retained and reported rather than silently deleted; those rows have not been recalculated by that run.
+On the first incremental run, both runners calculate all scenarios lacking verification metadata, even when prior monthly results exist. A subsequent run with unchanged inputs, code, assumptions and cached results can skip every scenario's Python calculation. Their shared simulation-run advisory lock prevents overlapping refreshes, and each runner commits all batches together or rolls back on failure. Existing rows outside a runner's active scope are retained rather than silently deleted; those rows are not refreshed by that run.
 
 ## 6. Run a future update
 
@@ -307,11 +313,22 @@ foreach ($script in $updates) {
 }
 ```
 
-The first nine scripts update source/raw/staging data. Then analysis runs, owner runs, and renter runs. After successful completion, refresh Power BI and use the comparison cutoff printed by renter.
+The first nine scripts update source/raw/staging data. Then analysis runs, followed by **incremental-by-scenario** owner and renter updates. The existing commands do not need an extra flag: incremental mode is the default. After successful completion, refresh Power BI and use the comparison cutoff printed by renter.
 
 The loop is a sequence of separate transactions, not one global database transaction. If a later script fails, earlier successful scripts remain committed. Fix the failed step, rerun it and then continue downstream. A failed owner or renter transaction does not leave half of its own batches committed.
 
-Source updaters can run independently when troubleshooting. Analysis and simulations need the appropriate upstream refreshes first. Full simulation recalculation can take several minutes or longer; zero source changes do not cause the current runners to skip their calculations automatically.
+Source updaters can run independently when troubleshooting. Analysis and simulations need the appropriate upstream refreshes first. **The analysis runner still fully refreshes its thirteen outputs.** The owner and renter runners now check scenario inputs/results and skip recursive Python calculations for unchanged, previously verified scenarios. Zero source changes do not eliminate their SQL preparation and verification work; market or model changes may still force broad renter recalculation.
+
+### Force a full simulation recalculation
+
+To rebuild and reverify all eligible owner and renter scenarios, run these commands in order from `SQL-Python`:
+
+```powershell
+python3 .\update_python\update_owner.py --full
+python3 .\update_python\update_renter.py --full
+```
+
+`--full` changes only the simulation calculation scope. It does not rerun source updaters or the analysis layer. Run the upstream refreshes first when their source data may be stale. The next ordinary run defaults to incremental mode again.
 
 ### Local-file fallbacks
 
@@ -335,7 +352,7 @@ These two updaters offer `--check-only` for diagnosing source parsing without da
 
 | Output | Meaning |
 | --- | --- |
-| Observations processed | Valid observations or calculated monthly rows examined in that run; not necessarily new rows. |
+| Observations processed | For source scripts, valid observations examined; for incremental simulations, monthly rows **recalculated** in Python. Unchanged cached rows are reported separately. Neither necessarily represents inserted rows. |
 | Rows inserted or updated | Rows whose stored input/value changed, including historical revisions. |
 | Raw total vs raw dated rows | Undated placeholders can make these counts differ in sources that preserve them. |
 | Missing values / suppression markers | Source-specific missingness; never assume every such count represents an error or a zero value. |
@@ -343,16 +360,19 @@ These two updaters offer `--check-only` for diagnosing source parsing without da
 | Exit code `0` | The script reported success. `--check-only` can also succeed without writing the database. |
 | Nonzero exit code | The script failed; stop downstream processing and inspect the message. |
 | Simulation comparison cutoff | Latest month supported by that simulation's required inputs. |
+| Scenarios recalculated / skipped | Owner reports eligible owner scenarios; renter reports owner scenarios, each with two renter portfolio paths. |
+| Cached monthly rows verified | Saved rows compared against regenerated inputs and prior result fingerprints, without rerunning the recursive financial calculation. |
+| Calculation reasons | Why a scenario was recalculated or skipped (e.g., new, changed inputs/model, invalid results, unchanged, or forced full). |
 
 It is normal for a source updater to report zero changes when the publisher has not released or revised anything in the checked range. It is also normal for simulation results to change in many later months after a smaller number of historical input revisions, because recursive balances and cumulative costs propagate forward.
 
 Different missing-data rules apply by source: FRED, CPI, mortgage and BIS skip missing observations; Teranet/CREA can retain numeric missingness, and CMHC preserves suppression markers in raw. A refresh does not universally delete old observations that are absent from a response.
 
-Each routine cycle needs one execution, not repeated reruns to prove completion. A second run should not create duplicate keys, but simulations still do the calculation work. Conditional writes avoid rewriting identical monthly inputs/results; this is different from calculating only newly added months.
+Each routine cycle needs one execution, not repeated reruns to prove completion. On the first incremental run, missing verification state causes full scenario recalculation. On a second run with unchanged dependencies, owner/renter can report **zero scenarios recalculated** and skip the recursive calculations. They still generate/check inputs and compare cached results. Conditional writes avoid rewriting identical stored values; scenario-level incremental refresh is **not** calculation of only newly added months.
 
 ## 8. Recorded completed run
 
-These values came from the project's completed run on October 23, 2026. They are useful reference points, not fixed expected outputs for future updates.
+These values came from the project's completed run on October 23, 2026, **before the new scenario-level incremental refresh was introduced**. They are historical coverage and row-count reference points, not evidence that the updated incremental runners have been executed or benchmarked.
 
 | Item | Recorded result |
 | --- | --- |
@@ -365,6 +385,8 @@ These values came from the project's completed run on October 23, 2026. They are
 | Owner latest month | `2026-09-01` |
 | Renter paths / monthly rows | `55,944` / `6,156,864` |
 | Renter comparison cutoff | `2025-12-01` |
+
+The existing totals describe rows produced by that recorded full run. Under the updated workflow, a normal incremental run can calculate fewer rows while retaining the same complete saved scenario coverage. Check `scenarios_calculated`, `scenarios_skipped`, or the corresponding renter owner-scenario fields in each new audit report.
 
 For matching owner/renter comparisons in this recorded run, use the same scenario and month through December 2025. For a completed 5/10/15/20-year holding-period comparison, also select the sale-month rows (`is_sale_month = TRUE`). A path cut off before its planned sale is a partial holding-period path.
 
@@ -386,6 +408,9 @@ The thirteen analysis tables were refreshed from their available staging inputs,
 | Missing rent, CPI or stock month in renter | Check the required source and upstream refresh. Do not extend coverage by silently filling missing investment-month returns with zero. |
 | Latest dates differ across tables | Compare observation frequencies and release coverage; annual rent and quarterly BIS data need not share monthly stock dates. |
 | Power BI still shows old results | Refresh its imported data after the relevant database updates complete. GitHub push/merge does not refresh the report. |
+| First incremental run recalculates everything | Expected when `simulation.owner_refresh_state` or `simulation.renter_refresh_state` has no verification records yet. Run successfully once to establish the baseline. |
+| A later run recalculates all renter scenarios | Check for modified renter code, shared assumptions, market returns or CPI. The renter calculation signature conservatively covers all prepared market history. |
+| Cached result mismatch or missing verification | Inspect the JSON reconciliation report and database data. Repair the cause, then rerun or use `--full` for a deliberate rebuild. |
 
 The check files listed in the project layout are `check_SQL/1. raw_schema_checks.sql`, `2. staging_schema_checks.sql`, `3. analysis_schema_checks.sql` and `4. simulation_checks.sql`. Use them for targeted investigation; their contents should be reviewed before execution.
 
